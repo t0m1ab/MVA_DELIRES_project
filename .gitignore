@@ -1,0 +1,11 @@
+.DS_store
+.venv/*
+**/__pycache__/
+
+delires/diffpir/figs/
+delires/diffpir/model_zoo/
+delires/diffpir/results/
+delires/diffpir/motionblur/
+
+**/notes.txt
+**/sandbox.py
