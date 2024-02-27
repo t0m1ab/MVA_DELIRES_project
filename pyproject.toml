@@ -1,0 +1,27 @@
+[project]
+name = "delires"
+version = "0.1.0"
+description = "MVA Guided Diffusion Models project for the DELIRES class"
+keywords = ["diffusion", "denoising", "inpainting", "super resolution", "deep learning", "computer vision"]
+requires-python = ">=3.10"
+
+authors = [
+    {name = "Tom Labiausse", email = "tom.labiausse@student-cs.fr"},
+    {name = "Theïlo Terrisse", email = "theilo.terrisse@eleves.enpc.fr"},
+]
+
+urls = {source = "https://github.com/t0m1ab/MVA_DELIRES_project"}
+
+# automatically install the following packages when installing the project (no need to pip install -r requirements.txt)
+dependencies = []
+
+# optional dependencies are not installed by default but can be if specified like so: pip install .[dev]
+[project.optional-dependencies]
+dev = []
+
+# [project.scripts]
+# alphazero = "delires.__main__:main"
+
+[build-system]
+build-backend = "flit_core.buildapi"
+requires = ["flit_core >=3.2,<4"]
