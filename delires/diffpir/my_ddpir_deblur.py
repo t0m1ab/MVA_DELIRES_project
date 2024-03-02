@@ -70,9 +70,7 @@ class DiffPIRDeblurConfig:
 
 def main():
 
-    # ----------------------------------------
-    # Preparation
-    # ----------------------------------------
+    ### 1 - CONFIGURATION
 
     config = DiffPIRDeblurConfig()
 
@@ -113,10 +111,8 @@ def main():
     t_start                 = utils_model.find_nearest(reduced_alpha_cumprod, 2 * noise_inti_img) # start timestep of the diffusion process
     t_start                 = config.num_train_timesteps - 1              
 
-    
-    # ----------------------------------------
-    # L_path, E_path, H_path
-    # ----------------------------------------
+
+    ### 2 - L_path, E_path, H_path
 
     L_path = os.path.join(testsets, config.testset_name) # L_path, for Low-quality images
     E_path = os.path.join(results, result_name) # E_path, for Estimated images
@@ -126,17 +122,18 @@ def main():
     utils_logger.logger_info(logger_name, log_path=os.path.join(E_path, logger_name+'.log'))
     logger = logging.getLogger(logger_name)
 
-    # ----------------------------------------
-    # load model
-    # ----------------------------------------
 
-    model_config = dict(
+    ### 3 - MODEL
+
+    if config.model_name == "diffusion_ffhq_10m":
+        model_config = dict(
             model_path=model_path,
             num_channels=128,
             num_res_blocks=1,
             attention_resolutions="16",
-        ) if config.model_name == 'diffusion_ffhq_10m' \
-        else dict(
+        )
+    else:
+        model_config = dict(
             model_path=model_path,
             num_channels=256,
             num_res_blocks=2,
@@ -168,7 +165,62 @@ def main():
         import lpips
         loss_fn_vgg = lpips.LPIPS(net='vgg').to(device)
     
-    def test_rho(lambda_=config.lambda_, zeta=config.zeta, model_output_type=config.model_output_type):
+
+    def create_blur_kernel(idx: int):
+
+        if config.use_DIY_kernel:
+            np.random.seed(seed=idx*10)  # for reproducibility of blur kernel for each image
+            if config.blur_mode == 'Gaussian':
+                kernel_std_i = kernel_std * np.abs(np.random.rand()*2+1)
+                kernel = GaussialBlurOperator(kernel_size=config.kernel_size, intensity=kernel_std_i, device=device)
+            elif config.blur_mode == 'motion':
+                kernel = MotionBlurOperator(kernel_size=config.kernel_size, intensity=kernel_std, device=device)
+            k_tensor = kernel.get_kernel().to(device, dtype=torch.float)
+            k = k_tensor.clone().detach().cpu().numpy()       #[0,1]
+            k = np.squeeze(k)
+            k = np.squeeze(k)
+        else:
+            k_index = 0
+            kernels = hdf5storage.loadmat(os.path.join(config.cwd, 'kernels', 'Levin09.mat'))['kernels']
+            k = kernels[0, k_index].astype(np.float32)
+        
+        # img_name, ext = os.path.splitext(os.path.basename(img))
+        # util.imsave(k*255.*200, os.path.join(E_path, f'motion_kernel_{img_name}{ext}'))
+        util.imsave(k*255.*200, os.path.join(E_path, "blur_kernel.jpeg"))
+        #np.save(os.path.join(E_path, 'motion_kernel.npy'), k)
+        k_4d = torch.from_numpy(k).to(device)
+        k_4d = torch.einsum('ab,cd->abcd',torch.eye(3).to(device),k_4d)
+    
+        return k, k_4d
+
+    
+    def create_blurred_and_noised_image(kernel: np.ndarray, img: str):
+
+        img_name, ext = os.path.splitext(os.path.basename(img))
+        img_H = util.imread_uint(img, n_channels=config.n_channels)
+        img_H = util.modcrop(img_H, 8)  # modcrop
+
+        # mode='wrap' is important for analytical solution
+        img_L = ndimage.convolve(img_H, np.expand_dims(kernel, axis=2), mode='wrap')
+        util.imshow(img_L) if config.show_img else None
+        img_L = util.uint2single(img_L)
+
+        np.random.seed(seed=0)  # for reproducibility
+        img_L = img_L * 2 - 1
+        img_L += np.random.normal(0, config.noise_level_img * 2, img_L.shape) # add AWGN
+        img_L = img_L / 2 + 0.5
+
+        return img_L, img_H, img_name, ext
+    
+
+    ### 4 - RESTORATION LOGIC
+
+    def apply_restoration(
+            lambda_: float, 
+            zeta: float, 
+            model_output_type: str,
+        ):
+        """ Perform restoration of images in L_paths using the <config> parameters and <model>. """
         logger.info('eta:{:.3f}, zeta:{:.3f}, lambda:{:.3f}, guidance_scale:{:.2f}'.format(config.eta, zeta, lambda_, config.guidance_scale))
         test_results = OrderedDict()
         test_results['psnr'] = []
@@ -176,46 +228,19 @@ def main():
             test_results['lpips'] = []
 
         for idx, img in enumerate(L_paths):
-            if config.use_DIY_kernel:
-                np.random.seed(seed=idx*10)  # for reproducibility of blur kernel for each image
-                if config.blur_mode == 'Gaussian':
-                    kernel_std_i = kernel_std * np.abs(np.random.rand()*2+1)
-                    kernel = GaussialBlurOperator(kernel_size=config.kernel_size, intensity=kernel_std_i, device=device)
-                elif config.blur_mode == 'motion':
-                    kernel = MotionBlurOperator(kernel_size=config.kernel_size, intensity=kernel_std, device=device)
-                k_tensor = kernel.get_kernel().to(device, dtype=torch.float)
-                k = k_tensor.clone().detach().cpu().numpy()       #[0,1]
-                k = np.squeeze(k)
-                k = np.squeeze(k)
-            else:
-                k_index = 0
-                kernels = hdf5storage.loadmat(os.path.join(config.cwd, 'kernels', 'Levin09.mat'))['kernels']
-                k = kernels[0, k_index].astype(np.float32)
-            img_name, ext = os.path.splitext(os.path.basename(img))
-            util.imsave(k*255.*200, os.path.join(E_path, f'motion_kernel_{img_name}{ext}'))
-            #np.save(os.path.join(E_path, 'motion_kernel.npy'), k)
-            k_4d = torch.from_numpy(k).to(device)
-            k_4d = torch.einsum('ab,cd->abcd',torch.eye(3).to(device),k_4d)
-            
-            model_out_type = model_output_type
+
+            k, k_4d = create_blur_kernel(idx)
 
             # --------------------------------
             # (1) get img_L
             # --------------------------------
 
-            img_name, ext = os.path.splitext(os.path.basename(img))
-            img_H = util.imread_uint(img, n_channels=config.n_channels)
-            img_H = util.modcrop(img_H, 8)  # modcrop
+            img_L, img_H, img_name, ext = create_blurred_and_noised_image(k, img)
 
-            # mode='wrap' is important for analytical solution
-            img_L = ndimage.convolve(img_H, np.expand_dims(k, axis=2), mode='wrap')
-            util.imshow(img_L) if config.show_img else None
-            img_L = util.uint2single(img_L)
-
-            np.random.seed(seed=0)  # for reproducibility
-            img_L = img_L * 2 - 1
-            img_L += np.random.normal(0, config.noise_level_img * 2, img_L.shape) # add AWGN
-            img_L = img_L / 2 + 0.5
+            if config.save_L:
+                util.imsave(util.single2uint(img_L), os.path.join(E_path, img_name+'_LR'+ext))
+            
+            model_out_type = model_output_type
 
             # --------------------------------
             # (2) get rhos and sigmas
@@ -391,7 +416,6 @@ def main():
                     if config.show_img:
                         util.imshow(x_show)
 
-
             # --------------------------------
             # (3) img_E
             # --------------------------------
@@ -441,8 +465,8 @@ def main():
                 util.imshow(np.concatenate([img_I, img_E, img_H], axis=1), title='LR / Recovered / Ground-truth') if config.show_img else None
                 util.imsave(np.concatenate([img_I, img_E, img_H], axis=1), os.path.join(E_path, img_name+'_LEH'+ext))
 
-            if config.save_L:
-                util.imsave(util.single2uint(img_L), os.path.join(E_path, img_name+'_LR'+ext))
+            # if config.save_L:
+            #     util.imsave(util.single2uint(img_L), os.path.join(E_path, img_name+'_LR'+ext))
         
         # --------------------------------
         # Average PSNR and LPIPS
@@ -451,18 +475,21 @@ def main():
         ave_psnr = sum(test_results['psnr']) / len(test_results['psnr'])
         logger.info('------> Average PSNR of ({}), sigma: ({:.3f}): {:.4f} dB'.format(config.testset_name, noise_level_model, ave_psnr))
 
-
         if config.calc_LPIPS:
             ave_lpips = sum(test_results['lpips']) / len(test_results['lpips'])
             logger.info('------> Average LPIPS of ({}) sigma: ({:.3f}): {:.4f}'.format(config.testset_name, noise_level_model, ave_lpips))
 
-    
-    # experiments
+
+    ### 5 - APPLY RESTORATION
+            
     lambdas = [config.lambda_*i for i in range(7,8)]
     for lambda_ in lambdas:
         for zeta_i in [config.zeta*i for i in range(3,4)]:
-            test_rho(lambda_, zeta=zeta_i, model_output_type=config.model_output_type)
-
+            apply_restoration(
+                lambda_=lambda_,
+                zeta=zeta_i, 
+                model_output_type=config.model_output_type,
+            )
 
 if __name__ == '__main__':
 
