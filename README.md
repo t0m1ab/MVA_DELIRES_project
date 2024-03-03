@@ -19,7 +19,7 @@ pip install -e .
 
 * Install complementary code: 
 ```bash
-mv delires/diffpir/
+mv delires/models/diffpir/
 git clone git@github.com:LeviBorodenko/motionblur.git
 ``` 
 
