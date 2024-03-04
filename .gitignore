@@ -5,7 +5,6 @@
 delires/models/diffpir/figs/
 delires/models/diffpir/model_zoo/
 delires/models/diffpir/results/
-delires/models/diffpir/motionblur/
 
 **/notes.txt
 **/sandbox.py
