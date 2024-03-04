@@ -61,7 +61,6 @@ def downsample(x, sf=3):
     return x[..., st::sf, st::sf]
 
 
-
 def data_solution(x, FB, FBC, F2B, FBFy, alpha, sf):
     FR = FBFy + torch.fft.fftn(alpha*x, dim=(-2,-1))
     x1 = FB.mul(FR)
@@ -95,8 +94,6 @@ def pre_calculate(x, k, sf):
     return FB, FBC, F2B, FBFy
 
 
-
-
 def classical_degradation(x, k, sf=3):
     ''' blur + downsampling
 
@@ -112,7 +109,6 @@ def classical_degradation(x, k, sf=3):
     #x = filters.correlate(x, np.expand_dims(np.flip(k), axis=2))
     st = 0
     return x[st::sf, st::sf, ...]
-
 
 
 def shift_pixel(x, sf, upper_left=True):

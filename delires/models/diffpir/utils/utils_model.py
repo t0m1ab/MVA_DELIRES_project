@@ -1,11 +1,11 @@
 # -*- coding: utf-8 -*-
 import numpy as np
 import torch
-from utils import utils_image as util
 from functools import partial
-
-from guided_diffusion.script_util import add_dict_to_argparser
 import argparse
+
+from delires.models.diffpir.guided_diffusion.script_util import add_dict_to_argparser
+import delires.models.diffpir.utils.utils_image as util
 
 '''
 modified by Kai Zhang (github: https://github.com/cszn)
