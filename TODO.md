@@ -26,3 +26,15 @@ Implement a function `compute_metrics` that takes as inputs:
 * various parameters like the degradation method, the blur kernel...
 
 and returns all the required metrics. 
+
+
+At short term:
+* Make it a package (__TOML__): TOM
+* Create data folder and functions to generate degraded data + method (in Diffuser class). For a generated degraded dataset, store images(.png)+kernel(.npy)+args(.json). Kernels stored i, delires/.
+* Load/save methods for Diffuser + load/save kernel: Theilo
+* create the apply_ methods: both of us
+* Implement metrics
+* Finish pipeline to save results
+* Run experiments for DiffPIR
+* Do DPS/PiGDM...
+
