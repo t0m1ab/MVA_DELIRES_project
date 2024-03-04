@@ -4,13 +4,12 @@ import scipy
 from scipy import fftpack
 import torch
 from torch import nn
-from motionblur.motionblur import Kernel
-
 from math import cos, sin
 from numpy import zeros, ones, prod, array, pi, log, min, mod, arange, sum, mgrid, exp, pad, round
 from numpy.random import randn, rand
 from scipy.signal import convolve2d
 
+from delires.models.diffpir.motionblur.motionblur import Kernel
 # import utils_image as util
 
 '''

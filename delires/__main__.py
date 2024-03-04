@@ -47,6 +47,8 @@ def run_experiment(apply_method, problem_type: str, clean_dataset_path: str, deg
     report_metrics(metrics, os.path.join(LOGDIR, exp_name, "metrics.txt"))        
     
 
+def main():
+    print("Hello world!")
 
 
 if __name__ == "__main__":

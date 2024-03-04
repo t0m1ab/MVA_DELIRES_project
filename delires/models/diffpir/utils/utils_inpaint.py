@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 import numpy as np
 import torch
-from utils import utils_image as util 
+import delires.models.diffpir.utils.utils_image as util
 
 '''
 modified by Kai Zhang (github: https://github.com/cszn)

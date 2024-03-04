@@ -13,20 +13,19 @@ git clone git@github.com:t0m1ab/MVA_DELIRES_project.git
 
 * Install `delires` as a package in edit mode (see config in `pyproject.toml`): 
 ```bash
-mv delires/
+mv MVA_DELIRES_project/
 pip install -e .
-``` 
+```
 
-* Install complementary code: 
-```bash
-mv delires/models/diffpir/
-git clone git@github.com:LeviBorodenko/motionblur.git
-``` 
-
-* You should be able to run tests on the package or print the docs with the following commands in the terminal: 
+* **TODO:** You should be able to run tests on the package or print the docs with the following commands in the terminal: 
 ```bash
 delires --test
 delires --help
+``` 
+
+* Download diffusion models: 
+```bash
+bash download_model.sh
 ``` 
 
 ## 1 - Methods

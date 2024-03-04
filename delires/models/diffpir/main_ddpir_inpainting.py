@@ -7,13 +7,13 @@ import torch
 from datetime import datetime
 from collections import OrderedDict
 
-from utils import utils_model
-from utils import utils_logger
-from utils import utils_image as util
-from utils.utils_inpaint import mask_generator
+from delires.models.diffpir.utils import utils_model
+from delires.models.diffpir.utils import utils_logger
+from delires.models.diffpir.utils import utils_image as util
+from delires.models.diffpir.utils.utils_inpaint import mask_generator
 
 # from guided_diffusion import dist_util
-from guided_diffusion.script_util import (
+from delires.models.diffpir.guided_diffusion.script_util import (
     NUM_CLASSES,
     model_and_diffusion_defaults,
     create_model_and_diffusion,

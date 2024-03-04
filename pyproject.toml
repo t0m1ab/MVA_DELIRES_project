@@ -19,8 +19,8 @@ dependencies = []
 [project.optional-dependencies]
 dev = []
 
-# [project.scripts]
-# alphazero = "delires.__main__:main"
+[project.scripts]
+delires = "delires.__main__:main"
 
 [build-system]
 build-backend = "flit_core.buildapi"
