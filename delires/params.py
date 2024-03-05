@@ -5,7 +5,7 @@ import delires
 
 
 
-MODE = Literal["deblur", "sisr"]
+TASK = Literal["deblur", "sisr"]
 
 MODELS_PATH = os.path.join(delires.__path__[0], "models")
 KERNELS_PATH = os.path.join(delires.__path__[0], "kernels")

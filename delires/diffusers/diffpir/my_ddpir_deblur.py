@@ -1,5 +1,6 @@
 import os.path
 from pathlib import Path
+from logging import Logger
 import cv2
 import logging
 from tqdm import tqdm
@@ -67,6 +68,7 @@ def apply_DiffPIR_for_deblurring(
         model: UNetModel,
         diffusion: SpacedDiffusion,
         img_ext: str = "png",
+        logger: Logger = None,
     ) -> tuple[np.ndarray, dict]:
     """
     Apply the Diffusion PIR method to deblur an image.
@@ -82,6 +84,7 @@ def apply_DiffPIR_for_deblurring(
         - model: the UNetModel object
         - diffusion: the SpacedDiffusion object
         - img_ext: the extension of the image (ex: "png")
+        - logger: a Logger object. If None, nothing will be logged.
 
     RETURNS:
         - img_E: the restored image as a numpy array
@@ -105,12 +108,12 @@ def apply_DiffPIR_for_deblurring(
     k_4d = torch.einsum('ab,cd->abcd', torch.eye(3).to(device), torch.from_numpy(kernel).to(device))
 
     # setup logger
-    result_name = build_result_name(degraded_image_filename, config)
-    logger_name = result_name
-    Path(RESTORED_DATA_PATH).mkdir(parents=True, exist_ok=True)
-    utils_logger.logger_info(logger_name, log_path=os.path.join(RESTORED_DATA_PATH, f"{logger_name}.log"))
-    logger = logging.getLogger(logger_name)
-    logger.info(f"Using device {device}")
+    # result_name = build_result_name(degraded_image_filename, config)
+    # logger_name = result_name
+    # utils_logger.logger_info(logger_name, log_path=os.path.join(RESTORED_DATA_PATH, f"{logger_name}.log"))
+    # logger = logging.getLogger(logger_name)
+    if logger is not None:
+        logger.info(f"Using device {device}")
 
 
     ### 2 - NOISE SCHEDULE
@@ -158,14 +161,14 @@ def apply_DiffPIR_for_deblurring(
     Logs useful information about the configuration and the image to be restored before the restoration starts.
     """
 
-    logger.info('model_name:{}, image sigma:{:.3f}, model sigma:{:.3f}'.format(config.model_name, config.noise_level_img, noise_level_model))
-    logger.info('eta:{:.3f}, zeta:{:.3f}, lambda:{:.3f}, guidance_scale:{:.2f} '.format(config.eta, config.zeta, config.lambda_, config.guidance_scale))
-    logger.info('start step:{}, skip_type:{}, skip interval:{}, skipstep analytic steps:{}'.format(t_start, config.skip_type, skip, noise_model_t))
-    logger.info('use_DIY_kernel:{}, blur mode:{}'.format(config.use_DIY_kernel, config.blur_mode))
-    # logger.info('Model path: {:s}'.format(model_path))
-    logger.info(f"Clean image: {os.path.join(CLEAN_DATA_PATH, clean_image_filename)}")
-    logger.info(f"Degraded image: {os.path.join(DEGRADED_DATA_PATH, degraded_image_filename)}")
-    logger.info(f"Kernel: {os.path.join(DEGRADED_DATA_PATH, kernel_filename)}")
+    if logger is not None:
+        logger.info(f"model_name: {config.model_name} | image sigma: {config.noise_level_img} | model sigma: {noise_level_model}")
+        logger.info(f"eta: {config.eta} | zeta: {config.zeta} | lambda: {config.lambda_} | guidance_scale: {config.guidance_scale}")
+        logger.info(f"start step: {t_start} | skip_type: {config.skip_type} | skip interval: {skip} | skipstep analytic steps: {noise_model_t}")
+        logger.info(f"use_DIY_kernel: {config.use_DIY_kernel} | blur mode: {config.blur_mode}")
+        logger.info(f"Clean image: {clean_image_filename}")
+        logger.info(f"Degraded image: {degraded_image_filename}")
+        logger.info(f"Kernel: {kernel_filename}")
     
 
     ### 5 - SETUP ADAPTED VAR NAMES FOR THE RESTORATION LOGIC
@@ -189,9 +192,8 @@ def apply_DiffPIR_for_deblurring(
     # (1) init metrics dict
     # --------------------------------
 
-    logger.info('eta:{:.3f}, zeta:{:.3f}, lambda:{:.3f}, guidance_scale:{:.2f}'.format(config.eta, zeta, lambda_, config.guidance_scale))
     model_out_type = config.model_output_type
-    metrics = OrderedDict()
+    metrics = {}
 
     # --------------------------------
     # (2) get rhos and sigmas
@@ -247,7 +249,7 @@ def apply_DiffPIR_for_deblurring(
         progress_seq.append(seq[-1])
 
     # plot the values in <seq>
-    plot_sequence(seq, path=RESTORED_DATA_PATH, title=f'seq_{img_name}')
+    # plot_sequence(seq, path=RESTORED_DATA_PATH, title=f'seq_{img_name}')
     
     # reverse diffusion for one image from random noise
     for i in tqdm(range(len(seq))):
@@ -360,9 +362,8 @@ def apply_DiffPIR_for_deblurring(
             if x_show.ndim == 3:
                 x_show = np.transpose(x_show, (1, 2, 0))
             progress_img.append(x_show)
-            if config.log_process:
-                logger.info('{:>4d}, steps: {:>4d}, np.max(x_show): {:.4f}, np.min(x_show): {:.4f}'.format(seq[i], t_i, np.max(x_show), np.min(x_show)))
-            
+            if config.log_process and logger is not None:
+                logger.info(f"{seq[i]} | steps {t_i} | np.max(x_show): {np.max(x_show):.4f} | np.min(x_show): {np.min(x_show):.4f}")            
             if config.show_img:
                 util.imshow(x_show)
 
@@ -383,9 +384,11 @@ def apply_DiffPIR_for_deblurring(
         lpips_score = loss_fn_vgg(x_0.detach()*2-1, img_H_tensor)
         lpips_score = lpips_score.cpu().detach().numpy()[0][0][0][0]
         metrics['lpips'] = lpips_score
-        logger.info(f"{img_name:>10s} PSNR: {psnr:.4f}dB LPIPS: {lpips_score:.4f}")
+        if logger is not None:
+            logger.info(f"{img_name:>10s} PSNR: {psnr:.4f}dB LPIPS: {lpips_score:.4f}")
     else:
-        logger.info(f"{img_name:>10s} PSNR: {psnr:.4f}dB")
+        if logger is not None:
+            logger.info(f"{img_name:>10s} PSNR: {psnr:.4f}dB")
 
     if config.n_channels == 1:
         img_H = img_H.squeeze()

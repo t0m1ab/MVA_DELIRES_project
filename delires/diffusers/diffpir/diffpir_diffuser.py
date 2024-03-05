@@ -1,9 +1,11 @@
 import os
 from pathlib import Path
+from logging import Logger, getLogger
 import numpy as np
 import torch
 
 from delires.data import load_downsample_kernel, load_blur_kernel
+from delires.utils.utils_logger import logger_info
 from delires.diffusers.diffuser import Diffuser
 from delires.diffusers.diffpir.diffpir_configs import DiffPIRConfig, DiffPIRDeblurConfig
 from delires.diffusers.diffpir.utils import utils_image
@@ -29,9 +31,15 @@ from delires.params import (
 
 class DiffPIRDiffuser(Diffuser):
 
-    def __init__(self, config: DiffPIRConfig, **kwargs):
+    def __init__(self, config: DiffPIRConfig, logger: Logger = None, autolog: str = None, **kwargs):
 
         self.config = config
+        self.logger = logger
+
+        if autolog is not None and self.logger is None: # create a logger if not provided but if autolog is specified
+            Path(RESTORED_DATA_PATH).mkdir(parents=True, exist_ok=True)
+            logger_info(autolog, log_path=os.path.join(RESTORED_DATA_PATH, f"{autolog}.log"))
+            self.logger = getLogger(autolog)
     
         self.model: UNetModel = None
         self.diffusion: SpacedDiffusion = None
@@ -89,26 +97,49 @@ class DiffPIRDiffuser(Diffuser):
             self, 
             restored_image: np.ndarray, 
             restored_image_filename: str,
+            path: str = None,
             img_ext: str = "png",
         ):
-        utils_image.imsave(restored_image, os.path.join(RESTORED_DATA_PATH, f"{restored_image_filename}.{img_ext}"))
+        path = path if path is not None else RESTORED_DATA_PATH
+        Path(path).mkdir(parents=True, exist_ok=True)
+        restored_image_path = os.path.join(path, f"{restored_image_filename}.{img_ext}")
+        utils_image.imsave(restored_image, restored_image_path)
+        if self.logger is not None:
+            self.logger.info(f"Restored image saved in: {restored_image_path}")
         
     def apply_debluring(
             self,
             config: DiffPIRDeblurConfig,
             clean_image_filename: str,
             degraded_image_filename: str,
+            degraded_dataset_name: str = None,
+            experiment_name: str = None,
             kernel_filename: str = None,
             img_ext: str = "png",
-        ) -> None:
+        ) -> dict[str, float]:
+        """
+        Apply DiffPIR deblurring to a given degraded image.
+
+        ARGUMENTS:
+            - config: DiffPIRDeblurConfig used for the deblurring
+            - clean_image_filename: name of the clean image (without extension)
+            - degraded_image_filename: name of the degraded image (without extension)
+            - degraded_dataset_name: name of the degraded dataset (potential subfolder in DEGRADED_DATA_PATH)
+            - experiment_name: name of the experiment (potential subfolder in RESTORED_DATA_PATH)
+            - kernel_filename: name of the kernel (without extension)
+            - img_ext: extension of the images (default: "png")
+        
+        RETURNS:
+            - metrics: dict {metric_name: metric_value} containing the metrics of the deblurring
+        """
 
         if self.model is None or self.diffusion is None:
             raise ValueError("The model and diffusion objects must be loaded before applying deblurring.")
 
         # load images
-
+        degraded_dataset_name = degraded_dataset_name if degraded_dataset_name is not None else ""
         clean_image_png_path = os.path.join(CLEAN_DATA_PATH, f"{clean_image_filename}.{img_ext}")
-        degraded_image_np_path = os.path.join(DEGRADED_DATA_PATH, "blurred_dataset/", f"{degraded_image_filename}.npy")
+        degraded_image_np_path = os.path.join(DEGRADED_DATA_PATH, degraded_dataset_name, f"{degraded_image_filename}.npy")
 
         clean_image = utils_image.imread_uint(clean_image_png_path)
         degraded_image = np.load(degraded_image_np_path)
@@ -131,17 +162,21 @@ class DiffPIRDiffuser(Diffuser):
             kernel=self.kernel,
             model=self.model,
             diffusion=self.diffusion,
+            logger=self.logger,
         )
 
         # save restored image
+        experiment_name = experiment_name if experiment_name is not None else ""
         self.save_restored_image(
             restored_image=restored_image,
             restored_image_filename=f"{degraded_image_filename}_{config.model_name}",
+            path=os.path.join(RESTORED_DATA_PATH, experiment_name),
             img_ext=img_ext,
         )
 
-        # save metrics
-        print(f"NEED TO SAVE METRICS: {metrics}")
+        self.logger.info(50*"-") # separate logs between different images
+
+        return metrics
     
     def apply_sisr(self, degraded_image: np.ndarray):
         pass
@@ -150,7 +185,7 @@ class DiffPIRDiffuser(Diffuser):
 def main():
 
     diffpir_config = DiffPIRConfig()
-    diffpir_diffuser = DiffPIRDiffuser(diffpir_config)
+    diffpir_diffuser = DiffPIRDiffuser(diffpir_config, autolog="diffpir_debluring_test")
 
     diffpir_diffuser.load_blur_kernel("gaussian_kernel_05")
     # diffpir_diffuser.load_blur_kernel("motion_kernel_1")

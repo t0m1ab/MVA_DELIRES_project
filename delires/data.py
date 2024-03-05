@@ -12,12 +12,14 @@ from delires.diffusers.diffpir.utils.utils_deblur import MotionBlurOperator, Gau
 from delires.params import KERNELS_PATH, CLEAN_DATA_PATH, DEGRADED_DATA_PATH
 
 
-# GENERAL KERNEL MANAGEMENT
-
-def fetch_kernel_name_from_dataset(exp_name: str) -> str:
-    """ Fetch the kernel name from the experiment json file. """
-    experiment_info = utils.load_json(os.path.join(DEGRADED_DATA_PATH, exp_name, "dataset_info.json"))
-    return experiment_info["kernel_name"]
+def all_files_exist(filenames: list[str], ext: str = None, path: str = None) -> bool:
+    """ Check if all files in a list exist. """
+    path = "" if path is None else path
+    if ext is not None:
+        ext = ext[1:] if ext[0] == "." else ext
+    else:
+        ext = ""
+    return all([os.path.isfile(os.path.join(path, f"{f}.{ext}")) for f in filenames])
 
 
 # BLURRING
@@ -111,14 +113,22 @@ def generate_degraded_dataset_blurred(
     show_img: bool = False,
     ):
     """ Generate a degraded dataset from a clean dataset using a given blur kernel. """
-    print(f"Generating blurred dataset {degraded_dataset_name} from clean dataset using kernel {kernel_name}.")
+    print(f"Generating blurred dataset '{degraded_dataset_name}' from clean dataset using kernel {kernel_name}.")
     clean_dataset_path = os.path.join(CLEAN_DATA_PATH)
     degraded_dataset_path = os.path.join(DEGRADED_DATA_PATH, degraded_dataset_name)
     
     # Load clean dataset
     clean_dataset = os.listdir(clean_dataset_path)
     os.makedirs(degraded_dataset_path, exist_ok=True)
-    utils.archive_kwargs({"degraded_dataset_name": degraded_dataset_name, "kernel_name": kernel_name, "n_channels": n_channels, "noise_level_img": noise_level_img, "seed": seed}, os.path.join(degraded_dataset_path, "dataset_info.json"))    
+    kwargs = {
+        "degraded_dataset_name": degraded_dataset_name,
+        "images": [os.path.basename(f).split(".")[0] for f in clean_dataset], # remove ext
+        "kernel_name": kernel_name, 
+        "n_channels": n_channels, 
+        "noise_level_img": noise_level_img, 
+        "seed": seed
+    }
+    utils.archive_kwargs(kwargs, os.path.join(degraded_dataset_path, "dataset_info.json"))    
     
     for img in clean_dataset:
         create_blurred_and_noised_image(
@@ -131,7 +141,7 @@ def generate_degraded_dataset_blurred(
             show_img,
         )
         
-    print(f"Blurred dataset {degraded_dataset_name} generated.")
+    print(f"Blurred dataset '{degraded_dataset_name}' generated.")
         
     return degraded_dataset_path
 
@@ -218,14 +228,25 @@ def generate_degraded_dataset_downsampled(
     show_img: bool = False,
     ):
     """ Generate a degraded dataset from a clean dataset using a given downsample kernel. """
-    print(f"Generating downsampled dataset {degraded_dataset_name} from clean dataset using kernel {kernel_name}.")
+    print(f"Generating downsampled dataset '{degraded_dataset_name}' from clean dataset using kernel {kernel_name}.")
     clean_dataset_path = os.path.join(CLEAN_DATA_PATH)
     degraded_dataset_path = os.path.join(DEGRADED_DATA_PATH, degraded_dataset_name)
     
     # Load clean dataset
     clean_dataset = os.listdir(clean_dataset_path)
     os.makedirs(degraded_dataset_path, exist_ok=True)
-    utils.archive_kwargs({"degraded_dataset_name": degraded_dataset_name, "kernel_name": kernel_name, "n_channels": n_channels, "sr_mode": sr_mode, "classical_degradation": classical_degradation, "sf": sf, "noise_level_img": noise_level_img, "seed": seed}, os.path.join(degraded_dataset_path, "dataset_info.json"))
+    kwargs = {
+        "degraded_dataset_name": degraded_dataset_name,
+        "images": [os.path.basename(f).split(".")[0] for f in clean_dataset], # remove ext
+        "kernel_name": kernel_name, 
+        "n_channels": n_channels, 
+        "sr_mode": sr_mode, 
+        "classical_degradation": classical_degradation, 
+        "sf": sf, 
+        "noise_level_img": noise_level_img, 
+        "seed": seed
+    }
+    utils.archive_kwargs(kwargs, os.path.join(degraded_dataset_path, "dataset_info.json"))   
     
     for img in clean_dataset:
         create_downsampled_image(
@@ -241,7 +262,7 @@ def generate_degraded_dataset_downsampled(
             show_img,
         )
         
-    print(f"Downsampled dataset {degraded_dataset_name} generated.")
+    print(f"Downsampled dataset '{degraded_dataset_name}' generated.")
         
     return degraded_dataset_path
 

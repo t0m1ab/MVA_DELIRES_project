@@ -3,6 +3,12 @@ import csv
 import json
 
 
+def load_json(filename: str) -> dict:
+    with open(filename, "r") as file:
+        json_dict = json.load(file)
+    return json_dict
+
+
 def report_metrics(metrics, exp_path):
     with open(exp_path, mode='w') as file:
         writer = csv.writer(file, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)

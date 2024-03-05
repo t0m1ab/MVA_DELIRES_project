@@ -14,15 +14,14 @@ class DiffPIRDeblurConfig(DiffPIRConfig):
     model_name          = 'diffusion_ffhq_10m'  # diffusion_ffhq_10m, 256x256_diffusion_uncond; set diffusion model
     testset_name        = 'demo_test'                  # set testing set,  'imagenet_val' | 'ffhq_val'
     num_train_timesteps = 1000
-    iter_num            = 100           # set number of iterations
+    iter_num            = 3           # set number of iterations
     iter_num_U          = 1             # set number of inner iterations, default: 1
 
     show_img            = False         # default: False
     # save_L              = True          # save LR image
-    save_restoration    = True          # save restored image
+    save_restoration    = False          # save restored image
     save_LEH            = False         # save zoomed LR, E and H images
     save_progressive    = False         # save generation process
-    save_kernel         = True          # save blur kernel
     border              = 0
 	
     lambda_             = 1.0           # key parameter lambda
