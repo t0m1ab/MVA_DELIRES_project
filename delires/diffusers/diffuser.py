@@ -26,7 +26,10 @@ class Diffuser():
         ):
         self.kernel, self.kernel_4d = load_blur_kernel(diy_kernel_path, self.device, cwd)
     
-    def save_restored(self, path: str):
+    def load_model(self, model_path: str):
+        raise NotImplementedError
+
+    def save_restored_image(self, path: str):
         pass
         
     def apply_debluring(self, degraded_image: np.ndarray):

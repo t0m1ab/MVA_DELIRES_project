@@ -13,6 +13,12 @@ from delires.diffusers.diffpir.utils.utils_deblur import MotionBlurOperator, Gau
 from delires.params import KERNELS_PATH, CLEAN_DATA_PATH, DEGRADED_DATA_PATH
 
 
+# LOAD IMAGE
+
+def load_image(filename: str) -> np.ndarray:
+    return utils_image.imread_uint(filename)
+
+
 # BLURRING
 
 def create_blur_kernel(
@@ -43,12 +49,10 @@ def create_blur_kernel(
     return k
 
 
-def load_blur_kernel(
-    diy_kernel_name: str|None = None,
-    device: str|torch.DeviceObjType = "cpu",
-    ):
+def load_blur_kernel(diy_kernel_name: str|None = None) -> np.ndarray:
+    """ Load a blur kernel stored as a .npy file in KERNELS_PATH. """
     if diy_kernel_name:
-        k = np.load(os.path.join(KERNELS_PATH, diy_kernel_name + ".npy"))
+        k = np.load(os.path.join(KERNELS_PATH, f"{diy_kernel_name}.npy"))
     else:
         k_index = 0
         kernels = hdf5storage.loadmat(os.path.join(KERNELS_PATH, 'Levin09.mat'))['kernels']
@@ -58,10 +62,8 @@ def load_blur_kernel(
     # util.imsave(k*255.*200, os.path.join(E_path, f'motion_kernel_{img_name}{ext}'))
     # util.imsave(k*255.*200, os.path.join(E_path, "blur_kernel.jpeg"))
     #np.save(os.path.join(E_path, 'motion_kernel.npy'), k)
-    k_4d = torch.from_numpy(k).to(device)
-    k_4d = torch.einsum('ab,cd->abcd',torch.eye(3).to(device),k_4d)
 
-    return k, k_4d
+    return k
 
 
 def create_blurred_and_noised_image(
@@ -247,9 +249,9 @@ def main():
     kernel_name = "gaussian_kernel_05"
     noise_level_img = 0.05
     # blur_kernel = create_blur_kernel("Gaussian", 21, seed, kernel_name, "cpu")
-    blur_kernel, _ = load_blur_kernel(kernel_name, "cpu")
+    blur_kernel = load_blur_kernel(kernel_name)
     generate_degraded_dataset_blurred("blurred_dataset", blur_kernel, kernel_name, 3, noise_level_img, seed, False)
-    
+    return
     # Generate downsampled dataset
     seed = 0
     sr_mode = "cubic"

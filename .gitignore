@@ -7,6 +7,8 @@ delires/diffusers/diffpir/model_zoo/
 delires/diffusers/diffpir/results/
 
 delires/data/degraded_datasets
+delires/results/
+delires/models/
 
 **/notes.txt
 **/sandbox.py
