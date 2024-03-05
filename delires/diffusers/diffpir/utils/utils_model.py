@@ -4,8 +4,8 @@ import torch
 from functools import partial
 import argparse
 
-from delires.models.diffpir.guided_diffusion.script_util import add_dict_to_argparser
-import delires.models.diffpir.utils.utils_image as util
+from delires.diffusers.diffpir.guided_diffusion.script_util import add_dict_to_argparser
+import delires.diffusers.diffpir.utils.utils_image as util
 
 '''
 modified by Kai Zhang (github: https://github.com/cszn)

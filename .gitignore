@@ -2,9 +2,9 @@
 .venv/*
 **/__pycache__/
 
-delires/models/diffpir/figs/
-delires/models/diffpir/model_zoo/
-delires/models/diffpir/results/
+delires/diffusers/diffpir/figs/
+delires/diffusers/diffpir/model_zoo/
+delires/diffusers/diffpir/results/
 
 **/notes.txt
 **/sandbox.py

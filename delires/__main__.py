@@ -2,12 +2,9 @@ import sys
 import os
 import numpy as np
 
-from utils import *
+from delires.utils.utils import *
+from delires.params import *
 
-
-DATADIR = os.path.join("/home/theilo/Ponts/MVA/Cours/DELIRES/MVA_DELIRES_project/data")  # TODO: change to the right path
-
-LOGDIR = os.path.join("/home/theilo/Ponts/MVA/Cours/DELIRES/MVA_DELIRES_project/results")  # TODO: change to the right path
 
 
 def run_experiment(apply_method, problem_type: str, clean_dataset_path: str, degraded_dataset_path: str, nb_gen: int = 1, exp_name: str = "exp"):
@@ -17,8 +14,8 @@ def run_experiment(apply_method, problem_type: str, clean_dataset_path: str, deg
     # TODO: merge from pseudocode to code
 
     # Load clean and degraded datasets
-    clean_dataset = load_dataset(clean_dataset_path)
-    degraded_dataset = load_dataset(degraded_dataset_path)
+    clean_dataset_path = DATADIR + clean_dataset_path
+    degraded_dataset = DATADIR + degraded_dataset_path
     
     # Create experiment folder
     os.makedirs(os.path.join(LOGDIR, exp_name), exist_ok=False)

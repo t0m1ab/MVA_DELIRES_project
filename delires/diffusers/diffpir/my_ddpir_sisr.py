@@ -13,12 +13,12 @@ from collections import OrderedDict
 import hdf5storage
 from functools import partial
 
-from delires.models.diffpir.utils import utils_model
-from delires.models.diffpir.utils import utils_logger
-from delires.models.diffpir.utils import utils_sisr as sr
-from delires.models.diffpir.utils import utils_image as util
-from delires.models.diffpir.utils.utils_resizer import Resizer
-from delires.models.diffpir.utils.delires_utils import (
+from delires.diffusers.diffpir.utils import utils_model
+from delires.diffusers.diffpir.utils import utils_logger
+from delires.diffusers.diffpir.utils import utils_sisr as sr
+from delires.diffusers.diffpir.utils import utils_image as util
+from delires.diffusers.diffpir.utils.utils_resizer import Resizer
+from delires.diffusers.diffpir.utils.delires_utils import (
     create_downsampled_image, 
     get_downsample_kernel, 
     manually_build_image_path, 
@@ -26,7 +26,7 @@ from delires.models.diffpir.utils.delires_utils import (
 )
 
 # from guided_diffusion import dist_util
-from delires.models.diffpir.guided_diffusion.script_util import (
+from delires.diffusers.diffpir.guided_diffusion.script_util import (
     NUM_CLASSES,
     model_and_diffusion_defaults,
     create_model_and_diffusion,
@@ -38,7 +38,7 @@ class DiffPIRSisrConfig:
 
     noise_level_img     = 12.75/255.0                 # set AWGN noise level for LR image, default: 0
     model_name          = 'diffusion_ffhq_10m'  # diffusion_ffhq_10m, 256x256_diffusion_uncond; set diffusion model
-    testset_name        = 'my_tests'                  # set testing set,  'imagenet_val' | 'ffhq_val'
+    testset_name        = 'demo_test'                  # set testing set,  'imagenet_val' | 'ffhq_val'
     num_train_timesteps = 1000
     iter_num            = 100           # set number of iterations
     iter_num_U          = 1             # set number of inner iterations, default: 1
@@ -497,7 +497,7 @@ def apply_DiffPIR_for_sisr(
 
 def main():
 
-    img = "Tom" # image name without extension in the test location described in the configuration
+    img = "69037" # image name without extension in the test location described in the configuration
 
     config = DiffPIRSisrConfig()
     
