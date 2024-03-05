@@ -1,6 +1,6 @@
 import numpy as np
-from PIL import Image
 import csv
+import json
 
 
 def report_metrics(metrics, exp_path):
@@ -14,6 +14,4 @@ def report_metrics(metrics, exp_path):
             
             
 def archive_kwargs(kwargs, path):
-    with open(path, mode='w') as file:
-        for key, value in kwargs.items():
-            file.write(f"{key}: {value}\n")
+    json.dump(kwargs, open(path, "w"), indent="\t")

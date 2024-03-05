@@ -29,9 +29,7 @@ and returns all the required metrics.
 
 
 At short term:
-* Make it a package (__TOML__): TOM
-* Create data folder and functions to generate degraded data + method (in Diffuser class). For a generated degraded dataset, store images(.png)+kernel(.npy)+args(.json). Kernels stored i, delires/.
-* Load/save methods for Diffuser + load/save kernel: Theilo
+* Remove duplicates between `delires/diffusers/diffpir` and `delires`
 * create the apply_ methods: both of us
 * Implement metrics
 * Finish pipeline to save results

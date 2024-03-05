@@ -113,7 +113,7 @@ def generate_degraded_dataset_blurred(
     # Load clean dataset
     clean_dataset = os.listdir(clean_dataset_path)
     os.makedirs(degraded_dataset_path, exist_ok=True)
-    utils.archive_kwargs({"degraded_dataset_name": degraded_dataset_name, "kernel_name": kernel_name, "n_channels": n_channels, "noise_level_img": noise_level_img, "seed": seed}, os.path.join(degraded_dataset_path, "dataset_info.txt"))    
+    utils.archive_kwargs({"degraded_dataset_name": degraded_dataset_name, "kernel_name": kernel_name, "n_channels": n_channels, "noise_level_img": noise_level_img, "seed": seed}, os.path.join(degraded_dataset_path, "dataset_info.json"))    
     
     for img in clean_dataset:
         create_blurred_and_noised_image(
@@ -220,7 +220,7 @@ def generate_degraded_dataset_downsampled(
     # Load clean dataset
     clean_dataset = os.listdir(clean_dataset_path)
     os.makedirs(degraded_dataset_path, exist_ok=True)
-    utils.archive_kwargs({"degraded_dataset_name": degraded_dataset_name, "kernel_name": kernel_name, "n_channels": n_channels, "sr_mode": sr_mode, "classical_degradation": classical_degradation, "sf": sf, "noise_level_img": noise_level_img, "seed": seed}, os.path.join(degraded_dataset_path, "dataset_info.txt"))
+    utils.archive_kwargs({"degraded_dataset_name": degraded_dataset_name, "kernel_name": kernel_name, "n_channels": n_channels, "sr_mode": sr_mode, "classical_degradation": classical_degradation, "sf": sf, "noise_level_img": noise_level_img, "seed": seed}, os.path.join(degraded_dataset_path, "dataset_info.json"))
     
     for img in clean_dataset:
         create_downsampled_image(
