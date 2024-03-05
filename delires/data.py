@@ -5,13 +5,12 @@ from scipy import ndimage
 import torch
 import logging
 
-from delires.params import *
 import delires.utils.utils as utils
 import delires.utils.utils_image as utils_image
 from delires.diffusers.diffpir.utils import utils_sisr as sr
 from delires.utils.utils_resizer import Resizer
 from delires.diffusers.diffpir.utils.utils_deblur import MotionBlurOperator, GaussialBlurOperator
-
+from delires.params import KERNELS_PATH, CLEAN_DATA_PATH, DEGRADED_DATA_PATH
 
 
 # BLURRING
@@ -39,7 +38,7 @@ def create_blur_kernel(
     k = np.squeeze(k)
     
     if kernel_save_name is not None:
-        np.save(os.path.join(KERNELDIR, f"{kernel_save_name}.npy"), k)
+        np.save(os.path.join(KERNELS_PATH, f"{kernel_save_name}.npy"), k)
     
     return k
 
@@ -49,10 +48,10 @@ def load_blur_kernel(
     device: str|torch.DeviceObjType = "cpu",
     ):
     if diy_kernel_name:
-        k = np.load(os.path.join(KERNELDIR, diy_kernel_name + ".npy"))
+        k = np.load(os.path.join(KERNELS_PATH, diy_kernel_name + ".npy"))
     else:
         k_index = 0
-        kernels = hdf5storage.loadmat(os.path.join(KERNELDIR, 'Levin09.mat'))['kernels']
+        kernels = hdf5storage.loadmat(os.path.join(KERNELS_PATH, 'Levin09.mat'))['kernels']
         k = kernels[0, k_index].astype(np.float32)
 
     # img_name, ext = os.path.splitext(os.path.basename(img))
@@ -108,7 +107,7 @@ def generate_degraded_dataset_blurred(
     """ Generate a degraded dataset from a clean dataset using a given blur kernel. """
     print(f"Generating blurred dataset {degraded_dataset_name} from clean dataset using kernel {kernel_name}.")
     clean_dataset_path = os.path.join(CLEAN_DATA_PATH)
-    degraded_dataset_path = os.path.join(DEGRAGDED_DATA_PATH, degraded_dataset_name)
+    degraded_dataset_path = os.path.join(DEGRADED_DATA_PATH, degraded_dataset_name)
     
     # Load clean dataset
     clean_dataset = os.listdir(clean_dataset_path)
@@ -141,9 +140,9 @@ def load_downsample_kernel(
     """ Fetch the downsample kernel. k_index shoyld be 0 for bicubic degradation, in [0, 7] for classical degradation."""
     # kernels = hdf5storage.loadmat(os.path.join('kernels', 'Levin09.mat'))['kernels']
     if classical_degradation:
-        kernels = hdf5storage.loadmat(os.path.join(KERNELDIR, 'kernels_12.mat'))['kernels']
+        kernels = hdf5storage.loadmat(os.path.join(KERNELS_PATH, 'kernels_12.mat'))['kernels']
     else:
-        kernels = hdf5storage.loadmat(os.path.join(KERNELDIR, 'kernels_bicubicx234.mat'))['kernels']
+        kernels = hdf5storage.loadmat(os.path.join(KERNELS_PATH, 'kernels_bicubicx234.mat'))['kernels']
     
     if not classical_degradation:  # for bicubic degradation
         k_index = sf-2 if sf < 5 else 2
@@ -215,7 +214,7 @@ def generate_degraded_dataset_downsampled(
     """ Generate a degraded dataset from a clean dataset using a given downsample kernel. """
     print(f"Generating downsampled dataset {degraded_dataset_name} from clean dataset using kernel {kernel_name}.")
     clean_dataset_path = os.path.join(CLEAN_DATA_PATH)
-    degraded_dataset_path = os.path.join(DEGRAGDED_DATA_PATH, degraded_dataset_name)
+    degraded_dataset_path = os.path.join(DEGRADED_DATA_PATH, degraded_dataset_name)
     
     # Load clean dataset
     clean_dataset = os.listdir(clean_dataset_path)
@@ -241,7 +240,8 @@ def generate_degraded_dataset_downsampled(
     return degraded_dataset_path
 
 
-if __name__ == "__main__":
+def main():
+
     # Generate blurred dataset
     seed = 0
     kernel_name = "gaussian_kernel_05"
@@ -262,3 +262,7 @@ if __name__ == "__main__":
         kernel_name = "None"
         kernel = None
     generate_degraded_dataset_downsampled("downsampled_dataset", kernel, kernel_name, 3, sr_mode, False, 4, 0.05, seed, False)
+
+
+if __name__ == "__main__":
+    main()

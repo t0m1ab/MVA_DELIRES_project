@@ -3,8 +3,13 @@ import os
 import numpy as np
 
 from delires.utils.utils import *
-from delires.params import *
-
+from delires.params import (
+    MODELS_PATH,
+    KERNELS_PATH, 
+    CLEAN_DATA_PATH, 
+    DEGRADED_DATA_PATH, 
+    RESTORED_DATA_PATH,
+)
 
 
 def run_experiment(apply_method, problem_type: str, clean_dataset_path: str, degraded_dataset_path: str, nb_gen: int = 1, exp_name: str = "exp"):

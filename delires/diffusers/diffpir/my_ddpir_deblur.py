@@ -206,8 +206,8 @@ def method_apply_DiffPIR_for_deblurring(
     logger.info('use_DIY_kernel:{}, blur mode:{}'.format(config.use_DIY_kernel, config.blur_mode))
     # logger.info('Model path: {:s}'.format(model_path))
     logger.info(f"Clean image: {os.path.join(CLEAN_DATA_PATH, clean_image_filename)}")
-    logger.info(f"Degraded image: {os.path.join(DEGRAGDED_DATA_PATH, degraded_image_filename)}")
-    logger.info(f"Kernel: {os.path.join(DEGRAGDED_DATA_PATH, kernel_filename)}")
+    logger.info(f"Degraded image: {os.path.join(DEGRADED_DATA_PATH, degraded_image_filename)}")
+    logger.info(f"Kernel: {os.path.join(DEGRADED_DATA_PATH, kernel_filename)}")
     
     if config.calc_LPIPS:
         import lpips
