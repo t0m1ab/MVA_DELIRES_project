@@ -1,4 +1,5 @@
 import os.path
+from pathlib import Path
 import cv2
 import logging
 from tqdm import tqdm
@@ -10,6 +11,12 @@ import torch.nn.functional as F
 from datetime import datetime
 from collections import OrderedDict
 
+import delires
+MODELS_PATH = os.path.join(delires.__path__[0], "models")
+CLEAN_DATA_PATH = os.path.join(delires.__path__[0], "data/clean_images")
+DEGRAGDED_DATA_PATH = os.path.join(delires.__path__[0], "data/degraded_images/blurred")
+RESTORED_DATA_PATH = os.path.join(delires.__path__[0], "results")
+
 from delires.models.diffpir.utils import utils_model
 from delires.models.diffpir.utils import utils_logger
 from delires.models.diffpir.utils import utils_sisr as sr
@@ -20,6 +27,8 @@ from delires.models.diffpir.utils.delires_utils import (
     create_blurred_and_noised_image, 
     manually_build_image_path,
 )
+from delires.models.diffpir.guided_diffusion.unet import UNetModel
+from delires.models.diffpir.guided_diffusion.respace import SpacedDiffusion
 
 # from guided_diffusion import dist_util
 from delires.models.diffpir.guided_diffusion.script_util import (
@@ -40,8 +49,8 @@ class DiffPIRDeblurConfig:
     iter_num_U          = 1             # set number of inner iterations, default: 1
 
     show_img            = False         # default: False
-    save_L              = True          # save LR image
-    save_E              = True          # save estimated image
+    # save_L              = True          # save LR image
+    save_restoration    = True          # save restored image
     save_LEH            = False         # save zoomed LR, E and H images
     save_progressive    = False         # save generation process
     save_kernel         = True          # save blur kernel
@@ -71,29 +80,37 @@ class DiffPIRDeblurConfig:
     seed                = 0             # fixed
 
 
-def apply_DiffPIR_for_deblurring(
+def method_apply_DiffPIR_for_deblurring(
         config: DiffPIRDeblurConfig,
-        img_name: str,
+        clean_image_filename: str,
+        degraded_image_filename: str,
+        kernel_filename: str,
         ext: str,
-        img_L: np.ndarray,
-        img_H: np.ndarray,
+        clean_image: np.ndarray,
+        degraded_image: np.ndarray,
         kernel: np.ndarray,
         k_4d: torch.Tensor,
-    ):
+        model: UNetModel,
+        diffusion: SpacedDiffusion,
+    ) -> None:
     """
     Apply the Diffusion PIR method to deblur an image.
 
     ARGUMENTS:
         - config: a DiffPIRDeblurConfig object
-        - img_name: the name of the image (without extension, ex: "my_image")
-        - ext: the extension of the image (ex: ".jpeg")
-        - img_L: the blurred and noised image (low quality images = original images)
-        - img_H: the original image (estimated images = high quality images)
-        - k: the blur kernel (see delires.utils.delires_utils.create_blur_kernel() for more details)
+        - clean_image_filename: the name of the clean image (without extension, ex: "my_clean_image")
+        - degraded_image_filename: the name of the degraded image (without extension, ex: "my_degraded_image")
+        - kernel_filename: the name of the kernel (without extension, ex: "my_kernel")
+        - ext: the extension of the image (ex: ".png")
+        - clean_image: the clean image as a numpy array
+        - degraded_image: the degraded image as a numpy array
+        - kernel: the blur kernel (see delires.utils.delires_utils.create_blur_kernel() for more details)
         - k_4d: the blur kernel as a 4D tensor (see delires.utils.delires_utils.create_blur_kernel() for more details)
+        - model: the UNetModel object
+        - diffusion: the SpacedDiffusion object
 
     RETURNS:
-        - None for the moment but save the results according to paths specified in the configuration.
+        - None for the moment but save the results according to config and specified paths.
     """
 
     ### 1 - CONFIGURATION
@@ -104,17 +121,33 @@ def apply_DiffPIR_for_deblurring(
     skip = config.num_train_timesteps//config.iter_num # skip interval
     sigma = max(0.001,config.noise_level_img) # noise level associated with condition y
 
-    model_zoo = os.path.join(config.cwd, 'model_zoo') # fixed
-    testsets = os.path.join(config.cwd, 'testsets') # fixed
-    results = os.path.join(config.cwd, 'results') # fixed
-    result_name = f'{config.testset_name}_{config.task_current}_{config.generate_mode}_{config.model_name}_sigma{config.noise_level_img}_NFE{config.iter_num}_eta{config.eta}_zeta{config.zeta}_lambda{config.lambda_}_blurmode{config.blur_mode}'
-    model_path = os.path.join(model_zoo, config.model_name+'.pt')
+    # model_zoo = os.path.join(config.cwd, 'model_zoo') # fixed
+    # testsets = os.path.join(config.cwd, 'testsets') # fixed
+    # results = os.path.join(config.cwd, 'results') # fixed
+    # model_path = os.path.join(model_zoo, config.model_name+'.pt')
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     # elif torch.backends.mps.is_available():
     #     device = "mps"
     torch.cuda.empty_cache()
     print(f"Using device {device}")
+
+    result_name = f'{degraded_image_filename}_{config.task_current}_{config.generate_mode}_{config.model_name}_sigma{config.noise_level_img}_NFE{config.iter_num}_eta{config.eta}_zeta{config.zeta}_lambda{config.lambda_}_blurmode{config.blur_mode}'
+    result_path = RESTORED_DATA_PATH
+    Path(result_path).mkdir(parents=True, exist_ok=True)
+
+    logger_name = result_name
+    utils_logger.logger_info(logger_name, log_path=os.path.join(result_path, f"{logger_name}.log"))
+    logger = logging.getLogger(logger_name)
+
+    # load the kernel
+    # kernel, k_4d = create_blur_kernel(
+    #     use_DIY_kernel=config.use_DIY_kernel,
+    #     blur_mode=config.blur_mode,
+    #     kernel_size=config.kernel_size,
+    #     seed=config.seed,
+    #     cwd=config.cwd,
+    # )
 
     # noise schedule 
     beta_start              = 0.1 / 1000
@@ -137,38 +170,35 @@ def apply_DiffPIR_for_deblurring(
 
     ### 2 - L_path, E_path <=> input_path, output_path
 
-    L_path = os.path.join(testsets, config.testset_name) # L_path, for Low-quality images
-    E_path = os.path.join(results, result_name) # E_path, for Estimated images
-    util.mkdir(E_path)
-
-    logger_name = result_name
-    utils_logger.logger_info(logger_name, log_path=os.path.join(E_path, logger_name+'.log'))
-    logger = logging.getLogger(logger_name)
+    # L_path = os.path.join(testsets, config.testset_name) # L_path, for Low-quality images
+    # E_path = os.path.join(results, result_name) # E_path, for Estimated images
+    # util.mkdir(E_path)
 
 
     ### 3 - MODEL
 
-    if config.model_name == "diffusion_ffhq_10m":
-        model_config = dict(
-            model_path=model_path,
-            num_channels=128,
-            num_res_blocks=1,
-            attention_resolutions="16",
-        )
-    else:
-        model_config = dict(
-            model_path=model_path,
-            num_channels=256,
-            num_res_blocks=2,
-            attention_resolutions="8,16,32",
-        )
-    args = utils_model.create_argparser(model_config).parse_args([])
-    model, diffusion = create_model_and_diffusion(
-        **args_to_dict(args, model_and_diffusion_defaults().keys()))
-    # model.load_state_dict(
-    #     dist_util.load_state_dict(args.model_path, map_location="cpu")
-    # )
-    model.load_state_dict(torch.load(args.model_path, map_location="cpu"))
+    # model_path = os.path.join(MODELS_PATH, f"{config.model_name}.pt")
+    # if config.model_name == "diffusion_ffhq_10m":
+    #     model_config = dict(
+    #         model_path=model_path,
+    #         num_channels=128,
+    #         num_res_blocks=1,
+    #         attention_resolutions="16",
+    #     )
+    # else:
+    #     model_config = dict(
+    #         model_path=model_path,
+    #         num_channels=256,
+    #         num_res_blocks=2,
+    #         attention_resolutions="8,16,32",
+    #     )
+    # args = utils_model.create_argparser(model_config).parse_args([])
+    # model, diffusion = create_model_and_diffusion(
+    #     **args_to_dict(args, model_and_diffusion_defaults().keys()))
+    # # model.load_state_dict(
+    # #     dist_util.load_state_dict(args.model_path, map_location="cpu")
+    # # )
+    # model.load_state_dict(torch.load(args.model_path, map_location="cpu"))
     model.eval()
     if config.generate_mode != 'DPS_y0':
         # for DPS_yt, we can avoid backward through the model
@@ -180,12 +210,20 @@ def apply_DiffPIR_for_deblurring(
     logger.info('eta:{:.3f}, zeta:{:.3f}, lambda:{:.3f}, guidance_scale:{:.2f} '.format(config.eta, config.zeta, config.lambda_, config.guidance_scale))
     logger.info('start step:{}, skip_type:{}, skip interval:{}, skipstep analytic steps:{}'.format(t_start, config.skip_type, skip, noise_model_t))
     logger.info('use_DIY_kernel:{}, blur mode:{}'.format(config.use_DIY_kernel, config.blur_mode))
-    logger.info('Model path: {:s}'.format(model_path))
-    logger.info(L_path)
+    # logger.info('Model path: {:s}'.format(model_path))
+    logger.info(f"Clean image: {os.path.join(CLEAN_DATA_PATH, clean_image_filename)}")
+    logger.info(f"Degraded image: {os.path.join(DEGRAGDED_DATA_PATH, degraded_image_filename)}")
+    logger.info(f"Kernel: {os.path.join(DEGRAGDED_DATA_PATH, kernel_filename)}")
     
     if config.calc_LPIPS:
         import lpips
         loss_fn_vgg = lpips.LPIPS(net='vgg').to(device)
+    
+
+    ### 2 - LOAD IMAGES
+        
+    img_H = clean_image
+    img_L = degraded_image
     
 
     ### 4 - RESTORATION LOGIC
@@ -197,9 +235,17 @@ def apply_DiffPIR_for_deblurring(
             ext: str,
             lambda_: float, 
             zeta: float, 
-        ):
+        ) -> None:
         """
         Perform restoration of a single image using the <config> parameters and <model> previously defined.
+
+        ARGUMENTS:
+            - img_L: the blurred and noised image (low quality images = original images)
+            - img_H: the original image (estimated images = high quality images)
+            - img_name: the name of the image (without extension, ex: "my_image")
+            - ext: the extension of the image (ex: ".png")
+            - lambda_: the lambda parameter
+            - zeta: the zeta parameter
         """
         logger.info('eta:{:.3f}, zeta:{:.3f}, lambda:{:.3f}, guidance_scale:{:.2f}'.format(config.eta, zeta, lambda_, config.guidance_scale))
         test_results = OrderedDict()
@@ -207,11 +253,11 @@ def apply_DiffPIR_for_deblurring(
         if config.calc_LPIPS:
             test_results['lpips'] = []
 
-        if config.save_kernel:
-            util.imsave(kernel*255.*200, os.path.join(E_path, "blur_kernel.jpeg"))
+        # if config.save_kernel:
+        #     util.imsave(kernel*255.*200, os.path.join(E_path, "blur_kernel.jpeg"))
 
-        if config.save_L:
-            util.imsave(util.single2uint(img_L), os.path.join(E_path, img_name+'_LR'+ext))
+        # if config.save_L:
+        #     util.imsave(util.single2uint(img_L), os.path.join(E_path, img_name+'_LR'+ext))
         
         model_out_type = config.model_output_type
 
@@ -238,7 +284,7 @@ def apply_DiffPIR_for_deblurring(
 
         # x = util.single2tensor4(img_L).to(device)
 
-        y = util.single2tensor4(img_L).to(device)   #(1,3,256,256)
+        y = util.single2tensor4(img_L).to(device) # (1,3,256,256)
 
         # for y with given noise level, add noise from t_y
         t_y = utils_model.find_nearest(reduced_alpha_cumprod, 2 * config.noise_level_img)
@@ -270,7 +316,7 @@ def apply_DiffPIR_for_deblurring(
             progress_seq.append(seq[-1])
 
         # plot the values in <seq>
-        plot_sequence(seq, path=E_path, title=f'seq_{img_name}')
+        plot_sequence(seq, path=RESTORED_DATA_PATH, title=f'seq_{img_name}')
         
         # reverse diffusion for one image from random noise
         for i in tqdm(range(len(seq))):
@@ -412,8 +458,8 @@ def apply_DiffPIR_for_deblurring(
         if config.n_channels == 1:
             img_H = img_H.squeeze()
 
-        if config.save_E:
-            util.imsave(img_E, os.path.join(E_path, img_name+'_'+config.model_name+ext))
+        if config.save_restoration:
+            util.imsave(img_E, os.path.join(RESTORED_DATA_PATH, img_name+'_'+config.model_name+ext))
 
         if config.save_progressive:
             now = datetime.now()
@@ -421,7 +467,7 @@ def apply_DiffPIR_for_deblurring(
             img_total = cv2.hconcat(progress_img)
             if config.show_img:
                 util.imshow(img_total,figsize=(80,4))
-            util.imsave(img_total*255., os.path.join(E_path, img_name+'_sigma_{:.3f}_process_lambda_{:.3f}_{}_psnr_{:.4f}{}'.format(config.noise_level_img,lambda_,current_time,psnr,ext)))
+            util.imsave(img_total*255., os.path.join(RESTORED_DATA_PATH, img_name+'_sigma_{:.3f}_process_lambda_{:.3f}_{}_psnr_{:.4f}{}'.format(config.noise_level_img,lambda_,current_time,psnr,ext)))
                                                                         
         # --------------------------------
         # (4) img_LEH
@@ -436,7 +482,7 @@ def apply_DiffPIR_for_deblurring(
             img_I[:k_v.shape[0], -k_v.shape[1]:, :] = k_v
             img_I[:img_L.shape[0], :img_L.shape[1], :] = img_L
             util.imshow(np.concatenate([img_I, img_E, img_H], axis=1), title='LR / Recovered / Ground-truth') if config.show_img else None
-            util.imsave(np.concatenate([img_I, img_E, img_H], axis=1), os.path.join(E_path, img_name+'_LEH'+ext))
+            util.imsave(np.concatenate([img_I, img_E, img_H], axis=1), os.path.join(RESTORED_DATA_PATH, img_name+'_LEH'+ext))
 
         # if config.save_L:
         #     util.imsave(util.single2uint(img_L), os.path.join(E_path, img_name+'_LR'+ext))
@@ -461,7 +507,7 @@ def apply_DiffPIR_for_deblurring(
             __restoration_logic(
                 img_L=img_L,
                 img_H=img_H,
-                img_name=img_name,
+                img_name=degraded_image_filename,
                 ext=ext,
                 lambda_=lambda_,
                 zeta=zeta_i, 
@@ -495,16 +541,7 @@ def main():
         noise_level_img=config.noise_level_img,
     )
 
-    # Apply the Diffusion PIR method to deblur the image
-    apply_DiffPIR_for_deblurring(
-        config=config,
-        img_name=img_name, 
-        ext=ext,
-        img_L=img_L, 
-        img_H=img_H, 
-        kernel=k,
-        k_4d=k_4d,
-    )
+    # <method_apply_DiffPIR_for_deblurring> must be used in a Diffuser apply method
 
 
 if __name__ == '__main__':
