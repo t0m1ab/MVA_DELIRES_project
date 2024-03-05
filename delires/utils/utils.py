@@ -3,11 +3,6 @@ from PIL import Image
 import csv
 
 
-def save_img(arr, path):
-    im = Image.fromarray(arr)
-    im.save(path)
-    
-    
 def report_metrics(metrics, exp_path):
     with open(exp_path, mode='w') as file:
         writer = csv.writer(file, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
@@ -16,3 +11,9 @@ def report_metrics(metrics, exp_path):
         writer.writerow(["Overall"] + [np.mean(metric) for metric in metrics])
         for i in range(len(metrics["PSNR"])):
             writer.writerow([i, np.mean(metrics["PSNR"][i])])
+            
+            
+def archive_kwargs(kwargs, path):
+    with open(path, mode='w') as file:
+        for key, value in kwargs.items():
+            file.write(f"{key}: {value}\n")

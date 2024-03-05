@@ -11,12 +11,6 @@ import torch.nn.functional as F
 from datetime import datetime
 from collections import OrderedDict
 
-import delires
-MODELS_PATH = os.path.join(delires.__path__[0], "models")
-CLEAN_DATA_PATH = os.path.join(delires.__path__[0], "data/clean_images")
-DEGRAGDED_DATA_PATH = os.path.join(delires.__path__[0], "data/degraded_images/blurred")
-RESTORED_DATA_PATH = os.path.join(delires.__path__[0], "results")
-
 from delires.diffusers.diffpir.utils import utils_model
 from delires.diffusers.diffpir.utils import utils_logger
 from delires.diffusers.diffpir.utils import utils_sisr as sr

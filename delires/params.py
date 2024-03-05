@@ -1,4 +1,12 @@
 import os
+from typing import Literal
 
-DATADIR = os.path.join("/home/theilo/Ponts/MVA/Cours/DELIRES/MVA_DELIRES_project/data")  # TODO: change to the right path
-LOGDIR = os.path.join("/home/theilo/Ponts/MVA/Cours/DELIRES/MVA_DELIRES_project/results")  # TODO: change to the right path
+import delires
+
+
+
+MODELS_PATH = os.path.join(delires.__path__[0], "models")
+KERNELDIR = os.path.join(delires.__path__[0], "kernels")
+CLEAN_DATA_PATH = os.path.join(delires.__path__[0], "data/clean_images")
+DEGRAGDED_DATA_PATH = os.path.join(delires.__path__[0], "data/degraded_datasets")
+RESTORED_DATA_PATH = os.path.join(delires.__path__[0], "results")
