@@ -12,9 +12,8 @@ from delires.params import (
     DEGRADED_DATA_PATH, 
     RESTORED_DATA_PATH,
 )
-from delires.diffusers.diffuser import DIFFUSER_TYPE, DIFFUSERS
+from delires.diffusers.register import DIFFUSER_TYPE, DIFFUSERS
 from delires.utils.utils_logger import logger_info
-from delires.diffusers.diffpir.diffpir_diffuser import DiffPIRDiffuser
 from delires.diffusers.diffpir.diffpir_configs import DiffPIRConfig, DiffPIRDeblurConfig
 from delires.data import fetch_kernel_name_from_dataset
 import delires.utils.utils_image as utils_image

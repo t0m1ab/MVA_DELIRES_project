@@ -2,14 +2,6 @@ import numpy as np
 from typing import Literal, Union
 
 from delires.data import load_downsample_kernel, load_blur_kernel
-from delires.diffusers.diffpir.diffpir_diffuser import DiffPIRDiffuser
-
-
-
-DIFFUSER_TYPE = Literal["diffpir"]
-DIFFUSERS = {
-    "diffpir": DiffPIRDiffuser,
-}
 
 
 class Diffuser():
