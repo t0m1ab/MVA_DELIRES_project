@@ -3,7 +3,7 @@ from pathlib import Path
 import numpy as np
 import torch
 
-from delires.data import load_image, load_downsample_kernel, load_blur_kernel
+from delires.data import load_downsample_kernel, load_blur_kernel
 from delires.diffusers.diffuser import Diffuser
 from delires.diffusers.diffpir.diffpir_configs import DiffPIRConfig, DiffPIRDeblurConfig
 from delires.diffusers.diffpir.utils import utils_image
@@ -107,11 +107,11 @@ class DiffPIRDiffuser(Diffuser):
 
         # load images
 
-        clean_image_path = os.path.join(CLEAN_DATA_PATH, f"{clean_image_filename}.{img_ext}")
-        degraded_image_path = os.path.join(DEGRADED_DATA_PATH, "blurred_dataset/", f"{degraded_image_filename}.{img_ext}")
+        clean_image_png_path = os.path.join(CLEAN_DATA_PATH, f"{clean_image_filename}.{img_ext}")
+        degraded_image_np_path = os.path.join(DEGRADED_DATA_PATH, "blurred_dataset/", f"{degraded_image_filename}.npy")
 
-        clean_image = load_image(clean_image_path)
-        degraded_image = load_image(degraded_image_path)
+        clean_image = utils_image.imread_uint(clean_image_png_path)
+        degraded_image = np.load(degraded_image_np_path)
 
         # load kernel if necessary (otherwise use self.kernel and self.kernel_filename)
         if kernel_filename is not None:
@@ -119,7 +119,6 @@ class DiffPIRDiffuser(Diffuser):
 
         if self.kernel is None or self.kernel_filename is None:
             raise ValueError("The blur kernel must be loaded before applying deblurring.")
-        
 
         # apply DiffPIR deblurring
         restored_image, metrics = apply_DiffPIR_for_deblurring(
@@ -157,11 +156,11 @@ def main():
     # diffpir_diffuser.load_blur_kernel("motion_kernel_1")
 
     diffpir_deblur_config = DiffPIRDeblurConfig()
-    img_id = 69037
+    img_name = "theilo"
     diffpir_diffuser.apply_debluring(
         config=diffpir_deblur_config,
-        clean_image_filename=str(img_id),
-        degraded_image_filename=str(img_id),
+        clean_image_filename=img_name,
+        degraded_image_filename=img_name,
         # kernel_filename="blur_kernel_1",
     )
 

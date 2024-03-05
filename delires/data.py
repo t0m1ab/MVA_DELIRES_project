@@ -12,7 +12,6 @@ from delires.diffusers.diffpir.utils.utils_deblur import MotionBlurOperator, Gau
 from delires.params import KERNELS_PATH, CLEAN_DATA_PATH, DEGRADED_DATA_PATH
 
 
-
 # GENERAL KERNEL MANAGEMENT
 
 def fetch_kernel_name_from_dataset(exp_name: str) -> str:
@@ -93,8 +92,11 @@ def create_blurred_and_noised_image(
     degraded_img = degraded_img / 2 + 0.5
 
     if save_path is not None:
-        degraded_img = utils_image.single2uint(degraded_img)
-        utils_image.imsave(degraded_img, os.path.join(save_path, f"{img_name}{ext}"))
+        np.save(os.path.join(save_path, f"{img_name}.npy"), degraded_img) # save as .npy because diffpir...
+        utils_image.imsave(
+            utils_image.single2uint(degraded_img), 
+            os.path.join(save_path, f"{img_name}{ext}")
+        ) # save as .png for visualization
     else:
         return degraded_img, clean_img, img_name, ext
 
@@ -249,8 +251,8 @@ def main():
     # Generate blurred dataset
     seed = 0
     kernel_name = "gaussian_kernel_05"
-    noise_level_img = 0.05
-    # blur_kernel = create_blur_kernel("Gaussian", 21, seed, kernel_name, "cpu")
+    noise_level_img = 12.75/255.0 # 0.05
+    blur_kernel = create_blur_kernel("Gaussian", 61, seed, kernel_name, "cpu")
     blur_kernel = load_blur_kernel(kernel_name)
     generate_degraded_dataset_blurred("blurred_dataset", blur_kernel, kernel_name, 3, noise_level_img, seed, False)
     return
