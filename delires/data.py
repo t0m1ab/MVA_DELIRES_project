@@ -3,7 +3,6 @@ import hdf5storage
 import numpy as np
 from scipy import ndimage
 import torch
-import logging
 
 import delires.utils.utils as utils
 import delires.utils.utils_image as utils_image
@@ -13,10 +12,13 @@ from delires.diffusers.diffpir.utils.utils_deblur import MotionBlurOperator, Gau
 from delires.params import KERNELS_PATH, CLEAN_DATA_PATH, DEGRADED_DATA_PATH
 
 
-# LOAD IMAGE
 
-def load_image(filename: str) -> np.ndarray:
-    return utils_image.imread_uint(filename)
+# GENERAL KERNEL MANAGEMENT
+
+def fetch_kernel_name_from_dataset(exp_name: str) -> str:
+    """ Fetch the kernel name from the experiment json file. """
+    experiment_info = utils.load_json(os.path.join(DEGRADED_DATA_PATH, exp_name, "dataset_info.json"))
+    return experiment_info["kernel_name"]
 
 
 # BLURRING

@@ -11,7 +11,7 @@ import torch.nn.functional as F
 from datetime import datetime
 from collections import OrderedDict
 
-from delires.diffusers.diffpir.configs import DiffPIRDeblurConfig
+from delires.diffusers.diffpir.diffpir_configs import DiffPIRDeblurConfig
 from delires.diffusers.diffpir.utils import utils_model
 from delires.diffusers.diffpir.utils import utils_logger
 from delires.diffusers.diffpir.utils import utils_sisr as sr

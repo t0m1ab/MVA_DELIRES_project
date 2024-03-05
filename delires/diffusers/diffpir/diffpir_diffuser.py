@@ -5,7 +5,7 @@ import torch
 
 from delires.data import load_image, load_downsample_kernel, load_blur_kernel
 from delires.diffusers.diffuser import Diffuser
-from delires.diffusers.diffpir.configs import DiffPIRConfig, DiffPIRDeblurConfig
+from delires.diffusers.diffpir.diffpir_configs import DiffPIRConfig, DiffPIRDeblurConfig
 from delires.diffusers.diffpir.utils import utils_image
 from delires.diffusers.diffpir.utils import utils_model
 from delires.diffusers.diffpir.guided_diffusion.unet import UNetModel
