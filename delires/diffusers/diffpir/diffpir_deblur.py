@@ -252,7 +252,7 @@ def apply_DiffPIR_for_deblurring(
     # plot_sequence(seq, path=RESTORED_DATA_PATH, title=f'seq_{img_name}')
     
     # reverse diffusion for one image from random noise
-    for i in tqdm(range(len(seq))):
+    for i in tqdm(range(len(seq)), desc="DiffPIR sampling"):
         curr_sigma = sigmas[seq[i]].cpu().numpy()
         # time step associated with the noise level sigmas[i]
         t_i = utils_model.find_nearest(reduced_alpha_cumprod,curr_sigma)
