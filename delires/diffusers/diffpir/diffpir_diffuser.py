@@ -116,21 +116,24 @@ class DiffPIRDiffuser(Diffuser):
             experiment_name: str = None,
             kernel_filename: str = None,
             img_ext: str = "png",
-        ) -> dict[str, float]:
+            save: bool = False,
+        ) -> tuple[np.ndarray, dict[str, float]]:
         """
         Apply DiffPIR deblurring to a given degraded image.
 
         ARGUMENTS:
-            - config: DiffPIRDeblurConfig used for the deblurring
-            - clean_image_filename: name of the clean image (without extension)
-            - degraded_image_filename: name of the degraded image (without extension)
-            - degraded_dataset_name: name of the degraded dataset (potential subfolder in DEGRADED_DATA_PATH)
-            - experiment_name: name of the experiment (potential subfolder in RESTORED_DATA_PATH)
-            - kernel_filename: name of the kernel (without extension)
-            - img_ext: extension of the images (default: "png")
+            - config: DiffPIRDeblurConfig used for the deblurring.
+            - clean_image_filename: name of the clean image (without extension).
+            - degraded_image_filename: name of the degraded image (without extension).
+            - degraded_dataset_name: name of the degraded dataset (potential subfolder in DEGRADED_DATA_PATH).
+            - experiment_name: name of the experiment (potential subfolder in RESTORED_DATA_PATH). If None, then save directly in RESTORED_DATA_PATH.
+            - kernel_filename: name of the kernel (without extension). If None, then try to use self.kernel and self.kernel_filename.
+            - img_ext: extension of the images (default: "png").
+            - save: if True, the restored image will be saved in the RESTORED_DATA_PATH/<experiment_name> folder.
         
         RETURNS:
-            - metrics: dict {metric_name: metric_value} containing the metrics of the deblurring
+            - restored_image: np.ndarray containing the restored image.
+            - metrics: dict {metric_name: metric_value} containing the metrics of the deblurring.
         """
 
         if self.model is None or self.diffusion is None:
@@ -166,23 +169,26 @@ class DiffPIRDiffuser(Diffuser):
         )
 
         # save restored image
-        experiment_name = experiment_name if experiment_name is not None else ""
-        self.save_restored_image(
-            restored_image=restored_image,
-            restored_image_filename=f"{degraded_image_filename}_{config.model_name}",
-            path=os.path.join(RESTORED_DATA_PATH, experiment_name),
-            img_ext=img_ext,
-        )
+        if save:
+            experiment_name = experiment_name if experiment_name is not None else ""
+            self.save_restored_image(
+                restored_image=restored_image,
+                restored_image_filename=degraded_image_filename,
+                path=os.path.join(RESTORED_DATA_PATH, experiment_name),
+                img_ext=img_ext,
+            )
 
         self.logger.info(50*"-") # separate logs between different images
 
-        return metrics
+        return restored_image, metrics
     
     def apply_sisr(self, degraded_image: np.ndarray):
         pass
 
 
 def main():
+
+    # quick demo of the DiffPIR deblurring
 
     diffpir_config = DiffPIRConfig()
     diffpir_diffuser = DiffPIRDiffuser(diffpir_config, autolog="diffpir_debluring_test")
@@ -192,11 +198,13 @@ def main():
 
     diffpir_deblur_config = DiffPIRDeblurConfig()
     img_name = "theilo"
-    diffpir_diffuser.apply_debluring(
+    _ = diffpir_diffuser.apply_debluring(
         config=diffpir_deblur_config,
         clean_image_filename=img_name,
         degraded_image_filename=img_name,
-        # kernel_filename="blur_kernel_1",
+        degraded_dataset_name="blurred_dataset",
+        kernel_filename="gaussian_kernel_05",
+        save=True, # we save the image on the fly for the demo
     )
 
 

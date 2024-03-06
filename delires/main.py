@@ -83,9 +83,9 @@ def run_experiment(
         # lpips_values = []
         for gen_idx in range(nb_gen):
 
-            # apply the method
+            # apply the method (don't save the image in apply_task by default because there are multiple generations to save)
             if task == "deblur":
-                metrics = diffpir_diffuser.apply_debluring(
+                restored_image, metrics = diffpir_diffuser.apply_debluring(
                     config=diffuser_task_config,
                     clean_image_filename=img_name,
                     degraded_image_filename=img_name,
@@ -95,6 +95,13 @@ def run_experiment(
                 )
             else:
                 raise NotImplementedError
+
+            # save the restored image (with "_genX" suffix where X is the generation index)
+            diffpir_diffuser.save_restored_image(
+                restored_image=restored_image,
+                restored_image_filename=f"{img_name}_gen{gen_idx}",
+                path=os.path.join(RESTORED_DATA_PATH, exp_name),
+            )
             
             # compute metrics
             psnr_values.append(metrics["psnr"])
