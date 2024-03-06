@@ -3,14 +3,14 @@ from pathlib import Path
 from logging import Logger, getLogger
 import numpy as np
 import torch
-from diffusers import DDPMPipeline
+from diffusers import DDPMPipeline, DDPMScheduler, UNet2DModel
 
 from delires.data import load_downsample_kernel, load_blur_kernel
 from delires.utils.utils_logger import logger_info
 from delires.utils import utils_image
 from delires.methods.diffuser import Diffuser
-from delires.methods.dps.dps_configs import DPSConfig,DPSDeblurConfig
-# from delires.diffusers.diffpir.utils import utils_model
+from delires.methods.dps.dps_configs import DPSConfig, DPSDeblurConfig, SCHEDULER_CONFIG
+from delires.methods.diffpir.utils import utils_model
 from delires.methods.dps.dps_deblur import apply_DPS_for_deblurring
 
 from delires.methods.diffpir.guided_diffusion.script_util import (
@@ -40,7 +40,8 @@ class DPSDiffuser(Diffuser):
             logger_info(autolog, log_path=os.path.join(RESTORED_DATA_PATH, f"{autolog}.log"))
             self.logger = getLogger(autolog)
     
-        self.model: DDPMPipeline = None # ddpm model
+        self.model: UNet2DModel = None # torch.nn.Module object
+        self.scheduler: DDPMScheduler = None # ddpmscheduler object
         self.load_model(config) # store in self.model and self.diffusion
         self.device = config.device
 
@@ -66,32 +67,37 @@ class DPSDiffuser(Diffuser):
     
     def load_model(self, config: DPSConfig) -> None:
         """ Load the model and diffusion objects from the given config. """
-
-        self.model = DDPMPipeline.from_pretrained(config.model_name)
-
-        # model_path = os.path.join(MODELS_PATH, f"{config.model_name}.pt")
         
-        # if config.model_name == "diffusion_ffhq_10m":
-        #     model_config = dict(
-        #         model_path=model_path,
-        #         num_channels=128,
-        #         num_res_blocks=1,
-        #         attention_resolutions="16",
-        #     )
-        # else:
-        #     model_config = dict(
-        #         model_path=model_path,
-        #         num_channels=256,
-        #         num_res_blocks=2,
-        #         attention_resolutions="8,16,32",
-        #     )
+        if not config.model_name.startswith("google"):
+            model_path = os.path.join(MODELS_PATH, f"{config.model_name}.pt")
+            if config.model_name == "diffusion_ffhq_10m":
+                model_config = dict(
+                    model_path=model_path,
+                    num_channels=128,
+                    num_res_blocks=1,
+                    attention_resolutions="16",
+                )
+            elif config.model_name == "256x256_diffusion_uncond":
+                model_config = dict(
+                    model_path=model_path,
+                    num_channels=256,
+                    num_res_blocks=2,
+                    attention_resolutions="8,16,32",
+                )
+            args = utils_model.create_argparser(model_config).parse_args([])
+            model, diffusion = create_model_and_diffusion(**args_to_dict(args, model_and_diffusion_defaults().keys()))
+            model.load_state_dict(torch.load(args.model_path, map_location="cpu"))
+            self.model = model
+            self.diffusion = diffusion
 
-        # args = utils_model.create_argparser(model_config).parse_args([])
-        # model, diffusion = create_model_and_diffusion(**args_to_dict(args, model_and_diffusion_defaults().keys()))
-        # model.load_state_dict(torch.load(args.model_path, map_location="cpu"))
+        elif config.model_name == "google/ddpm-ema-celebahq-256":
+            self.model = DDPMPipeline.from_pretrained(config.model_name).unet
+            self.diffusion = None
 
-        # self.model = model
-        # self.diffusion = diffusion
+        else:
+            raise KeyError(f"Unknown model name: {config.model_name}")
+        
+        self.scheduler = DDPMScheduler.from_config(config=SCHEDULER_CONFIG)
 
     def save_restored_image(
             self, 
@@ -136,8 +142,8 @@ class DPSDiffuser(Diffuser):
             - metrics: dict {metric_name: metric_value} containing the metrics of the deblurring.
         """
 
-        if self.model is None:
-            raise ValueError("The model and diffusion objects must be loaded before applying deblurring.")
+        if self.model is None or self.scheduler is None:
+            raise ValueError("The model and scheduler objects must be loaded before applying deblurring.")
 
         # load images
         degraded_dataset_name = degraded_dataset_name if degraded_dataset_name is not None else ""
@@ -163,7 +169,9 @@ class DPSDiffuser(Diffuser):
             clean_image=clean_image,
             degraded_image=degraded_image,
             kernel=self.kernel,
-            ddpm_model=self.model,
+            model=self.model,
+            scheduler=self.scheduler,
+            diffusion=self.diffusion,
             logger=self.logger,
         )
 
