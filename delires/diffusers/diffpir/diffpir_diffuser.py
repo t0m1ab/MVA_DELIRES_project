@@ -12,7 +12,7 @@ from delires.diffusers.diffpir.utils import utils_image
 from delires.diffusers.diffpir.utils import utils_model
 from delires.diffusers.diffpir.guided_diffusion.unet import UNetModel
 from delires.diffusers.diffpir.guided_diffusion.respace import SpacedDiffusion
-from delires.diffusers.diffpir.my_ddpir_deblur import apply_DiffPIR_for_deblurring
+from delires.diffusers.diffpir.diffpir_deblur import apply_DiffPIR_for_deblurring
 
 from delires.diffusers.diffpir.guided_diffusion.script_util import (
     model_and_diffusion_defaults,
