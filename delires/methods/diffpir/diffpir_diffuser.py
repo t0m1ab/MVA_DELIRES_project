@@ -3,17 +3,18 @@ from pathlib import Path
 from logging import Logger, getLogger
 import numpy as np
 import torch
-from diffusers import DDPMPipeline
 
 from delires.data import load_downsample_kernel, load_blur_kernel
 from delires.utils.utils_logger import logger_info
-from delires.utils import utils_image
-from delires.diffusers.diffuser import Diffuser
-from delires.diffusers.dps.dps_configs import DPSConfig,DPSDeblurConfig
-# from delires.diffusers.diffpir.utils import utils_model
-from delires.diffusers.dps.dps_deblur import apply_DPS_for_deblurring
+from delires.methods.diffuser import Diffuser
+from delires.methods.diffpir.diffpir_configs import DiffPIRConfig, DiffPIRDeblurConfig
+from delires.methods.diffpir.utils import utils_image
+from delires.methods.diffpir.utils import utils_model
+from delires.methods.diffpir.guided_diffusion.unet import UNetModel
+from delires.methods.diffpir.guided_diffusion.respace import SpacedDiffusion
+from delires.methods.diffpir.diffpir_deblur import apply_DiffPIR_for_deblurring
 
-from delires.diffusers.diffpir.guided_diffusion.script_util import (
+from delires.methods.diffpir.guided_diffusion.script_util import (
     model_and_diffusion_defaults,
     create_model_and_diffusion,
     args_to_dict,
@@ -26,11 +27,11 @@ from delires.params import (
     DEGRADED_DATA_PATH,    
     RESTORED_DATA_PATH,
 )
-# DDPMPipeline.from_pretrained(model_name)
 
-class DPSDiffuser(Diffuser):
 
-    def __init__(self, config: DPSConfig, logger: Logger = None, autolog: str = None, **kwargs):
+class DiffPIRDiffuser(Diffuser):
+
+    def __init__(self, config: DiffPIRConfig, logger: Logger = None, autolog: str = None, **kwargs):
 
         self.config = config
         self.logger = logger
@@ -40,7 +41,8 @@ class DPSDiffuser(Diffuser):
             logger_info(autolog, log_path=os.path.join(RESTORED_DATA_PATH, f"{autolog}.log"))
             self.logger = getLogger(autolog)
     
-        self.model: DDPMPipeline = None # ddpm model
+        self.model: UNetModel = None
+        self.diffusion: SpacedDiffusion = None
         self.load_model(config) # store in self.model and self.diffusion
         self.device = config.device
 
@@ -64,34 +66,32 @@ class DPSDiffuser(Diffuser):
         self.kernel = load_blur_kernel(kernel_filename)
         self.kernel_filename = kernel_filename
     
-    def load_model(self, config: DPSConfig) -> None:
+    def load_model(self, config: DiffPIRConfig) -> None:
         """ Load the model and diffusion objects from the given config. """
 
-        self.model = DDPMPipeline.from_pretrained(config.model_name)
-
-        # model_path = os.path.join(MODELS_PATH, f"{config.model_name}.pt")
+        model_path = os.path.join(MODELS_PATH, f"{config.model_name}.pt")
         
-        # if config.model_name == "diffusion_ffhq_10m":
-        #     model_config = dict(
-        #         model_path=model_path,
-        #         num_channels=128,
-        #         num_res_blocks=1,
-        #         attention_resolutions="16",
-        #     )
-        # else:
-        #     model_config = dict(
-        #         model_path=model_path,
-        #         num_channels=256,
-        #         num_res_blocks=2,
-        #         attention_resolutions="8,16,32",
-        #     )
+        if config.model_name == "diffusion_ffhq_10m":
+            model_config = dict(
+                model_path=model_path,
+                num_channels=128,
+                num_res_blocks=1,
+                attention_resolutions="16",
+            )
+        else:
+            model_config = dict(
+                model_path=model_path,
+                num_channels=256,
+                num_res_blocks=2,
+                attention_resolutions="8,16,32",
+            )
 
-        # args = utils_model.create_argparser(model_config).parse_args([])
-        # model, diffusion = create_model_and_diffusion(**args_to_dict(args, model_and_diffusion_defaults().keys()))
-        # model.load_state_dict(torch.load(args.model_path, map_location="cpu"))
+        args = utils_model.create_argparser(model_config).parse_args([])
+        model, diffusion = create_model_and_diffusion(**args_to_dict(args, model_and_diffusion_defaults().keys()))
+        model.load_state_dict(torch.load(args.model_path, map_location="cpu"))
 
-        # self.model = model
-        # self.diffusion = diffusion
+        self.model = model
+        self.diffusion = diffusion
 
     def save_restored_image(
             self, 
@@ -109,7 +109,7 @@ class DPSDiffuser(Diffuser):
         
     def apply_debluring(
             self,
-            config: DPSDeblurConfig,
+            config: DiffPIRDeblurConfig,
             clean_image_filename: str,
             degraded_image_filename: str,
             degraded_dataset_name: str = None,
@@ -136,16 +136,16 @@ class DPSDiffuser(Diffuser):
             - metrics: dict {metric_name: metric_value} containing the metrics of the deblurring.
         """
 
-        if self.model is None:
+        if self.model is None or self.diffusion is None:
             raise ValueError("The model and diffusion objects must be loaded before applying deblurring.")
 
         # load images
         degraded_dataset_name = degraded_dataset_name if degraded_dataset_name is not None else ""
         clean_image_png_path = os.path.join(CLEAN_DATA_PATH, f"{clean_image_filename}.{img_ext}")
-        degraded_image_png_path = os.path.join(DEGRADED_DATA_PATH, degraded_dataset_name, f"{degraded_image_filename}.png")
+        degraded_image_np_path = os.path.join(DEGRADED_DATA_PATH, degraded_dataset_name, f"{degraded_image_filename}.npy")
 
         clean_image = utils_image.imread_uint(clean_image_png_path)
-        degraded_image = utils_image.imread_uint(degraded_image_png_path)
+        degraded_image = np.load(degraded_image_np_path)
 
         # load kernel if necessary (otherwise use self.kernel and self.kernel_filename)
         if kernel_filename is not None:
@@ -155,7 +155,7 @@ class DPSDiffuser(Diffuser):
             raise ValueError("The blur kernel must be loaded before applying deblurring.")
 
         # apply DiffPIR deblurring
-        restored_image, metrics = apply_DPS_for_deblurring(
+        restored_image, metrics = apply_DiffPIR_for_deblurring(
             config=config,
             clean_image_filename=clean_image_filename,
             degraded_image_filename=degraded_image_filename,
@@ -163,7 +163,8 @@ class DPSDiffuser(Diffuser):
             clean_image=clean_image,
             degraded_image=degraded_image,
             kernel=self.kernel,
-            ddpm_model=self.model,
+            model=self.model,
+            diffusion=self.diffusion,
             logger=self.logger,
         )
 
@@ -187,17 +188,17 @@ class DPSDiffuser(Diffuser):
 
 def main():
 
-    # quick demo of the DPS deblurring
+    # quick demo of the DiffPIR deblurring
 
-    dps_config = DPSConfig()
-    dps_diffuser = DPSDiffuser(dps_config, autolog="dps_debluring_test")
+    diffpir_config = DiffPIRConfig()
+    diffpir_diffuser = DiffPIRDiffuser(diffpir_config, autolog="diffpir_debluring_test")
 
-    dps_diffuser.load_blur_kernel("gaussian_kernel_05")
-    # dps_diffuser.load_blur_kernel("motion_kernel_1")
+    diffpir_diffuser.load_blur_kernel("gaussian_kernel_05")
+    # diffpir_diffuser.load_blur_kernel("motion_kernel_1")
 
-    diffpir_deblur_config = DPSDeblurConfig()
+    diffpir_deblur_config = DiffPIRDeblurConfig()
     img_name = "theilo"
-    _ = dps_diffuser.apply_debluring(
+    _ = diffpir_diffuser.apply_debluring(
         config=diffpir_deblur_config,
         clean_image_filename=img_name,
         degraded_image_filename=img_name,

@@ -12,22 +12,22 @@ import torch.nn.functional as F
 from datetime import datetime
 from collections import OrderedDict
 
-from delires.diffusers.diffpir.diffpir_configs import DiffPIRDeblurConfig
-from delires.diffusers.diffpir.utils import utils_model
-from delires.diffusers.diffpir.utils import utils_logger
-from delires.diffusers.diffpir.utils import utils_sisr as sr
-from delires.diffusers.diffpir.utils import utils_image as util
-from delires.diffusers.diffpir.utils.delires_utils import (
+from delires.methods.diffpir.diffpir_configs import DiffPIRDeblurConfig
+from delires.methods.diffpir.utils import utils_model
+from delires.methods.diffpir.utils import utils_logger
+from delires.methods.diffpir.utils import utils_sisr as sr
+from delires.methods.diffpir.utils import utils_image as util
+from delires.methods.diffpir.utils.delires_utils import (
     plot_sequence, 
     create_blur_kernel, 
     create_blurred_and_noised_image, 
     manually_build_image_path,
 )
-from delires.diffusers.diffpir.guided_diffusion.unet import UNetModel
-from delires.diffusers.diffpir.guided_diffusion.respace import SpacedDiffusion
+from delires.methods.diffpir.guided_diffusion.unet import UNetModel
+from delires.methods.diffpir.guided_diffusion.respace import SpacedDiffusion
 
 # from guided_diffusion import dist_util
-from delires.diffusers.diffpir.guided_diffusion.script_util import (
+from delires.methods.diffpir.guided_diffusion.script_util import (
     NUM_CLASSES,
     model_and_diffusion_defaults,
     create_model_and_diffusion,

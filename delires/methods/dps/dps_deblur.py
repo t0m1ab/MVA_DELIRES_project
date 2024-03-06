@@ -5,9 +5,9 @@ from logging import Logger
 from diffusers import DDPMPipeline
 
 from delires.utils.utils_image import get_infos_img
-import delires.diffusers.dps.utils.utils_agem as utils_agem
-import delires.diffusers.dps.utils.utils_image as utils_image
-from delires.diffusers.dps.dps_configs import DPSConfig, DPSDeblurConfig
+import delires.methods.dps.utils.utils_agem as utils_agem
+import delires.methods.dps.utils.utils_image as utils_image
+from delires.methods.dps.dps_configs import DPSConfig, DPSDeblurConfig
 
 
 def adapt_kernel_dps(kernel: np.ndarray) -> torch.Tensor:
@@ -123,9 +123,9 @@ def apply_DPS_for_deblurring(
     scheduler.set_timesteps(config.timesteps)
 
     if logger is not None:
-        print_stats(clean_image)
-        print_stats(degraded_image)
-        print_stats(kernel)
+        logger.debug(get_infos_img(clean_image))
+        logger.debug(get_infos_img(degraded_image))
+        logger.debug(get_infos_img(kernel))
 
     # setup data and kernel
     sample = {
@@ -135,9 +135,9 @@ def apply_DPS_for_deblurring(
     }
 
     if logger is not None:
-        print_stats(sample["H"])
-        print_stats(sample["L"])
-        print_stats(sample["kernel"])
+        logger.debug(get_infos_img(sample["H"]))
+        logger.debug(get_infos_img(sample["L"]))
+        logger.debug(get_infos_img(sample["kernel"]))
 
     # log informations
     if logger is not None:

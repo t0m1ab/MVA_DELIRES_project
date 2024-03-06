@@ -1,5 +1,5 @@
 import torch
-import delires.diffusers.dps.utils.utils_agem as agem
+import delires.methods.dps.utils.utils_agem as agem
 
 
 def hadamard(x, kmap):

@@ -9,7 +9,7 @@ from numpy import zeros, ones, prod, array, pi, log, min, mod, arange, sum, mgri
 from numpy.random import randn, rand
 from scipy.signal import convolve2d
 
-from delires.diffusers.diffpir.motionblur.motionblur import Kernel
+from delires.methods.diffpir.motionblur.motionblur import Kernel
 # import utils_image as util
 
 '''

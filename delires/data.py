@@ -6,9 +6,9 @@ import torch
 
 import delires.utils.utils as utils
 import delires.utils.utils_image as utils_image
-from delires.diffusers.diffpir.utils import utils_sisr as sr
+from delires.methods.diffpir.utils import utils_sisr as sr
 from delires.utils.utils_resizer import Resizer
-from delires.diffusers.diffpir.utils.utils_deblur import MotionBlurOperator, GaussialBlurOperator
+from delires.methods.diffpir.utils.utils_deblur import MotionBlurOperator, GaussialBlurOperator
 from delires.params import KERNELS_PATH, CLEAN_DATA_PATH, DEGRADED_DATA_PATH
 
 

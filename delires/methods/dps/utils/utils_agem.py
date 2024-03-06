@@ -3,7 +3,7 @@ import numpy as np
 import torch.fft as fft
 from math import sqrt
 from scipy.ndimage import measurements, interpolation
-import delires.diffusers.dps.utils.utils_deblur as deblur
+import delires.methods.dps.utils.utils_deblur as deblur
 
 def clean_output(x):
     return (x.clamp(-1, 1) + 1) / 2

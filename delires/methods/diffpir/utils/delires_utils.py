@@ -5,10 +5,10 @@ import torch
 import hdf5storage
 from scipy import ndimage
 
-from delires.diffusers.diffpir.utils import utils_image
-from delires.diffusers.diffpir.utils.utils_deblur import MotionBlurOperator, GaussialBlurOperator
-from delires.diffusers.diffpir.utils.utils_resizer import Resizer
-from delires.diffusers.diffpir.utils import utils_sisr as sr
+from delires.methods.diffpir.utils import utils_image
+from delires.methods.diffpir.utils.utils_deblur import MotionBlurOperator, GaussialBlurOperator
+from delires.methods.diffpir.utils.utils_resizer import Resizer
+from delires.methods.diffpir.utils import utils_sisr as sr
 
 
 #### BLURRING

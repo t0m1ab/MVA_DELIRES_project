@@ -13,12 +13,12 @@ from collections import OrderedDict
 import hdf5storage
 from functools import partial
 
-from delires.diffusers.diffpir.utils import utils_model
-from delires.diffusers.diffpir.utils import utils_logger
-from delires.diffusers.diffpir.utils import utils_sisr as sr
-from delires.diffusers.diffpir.utils import utils_image as util
-from delires.diffusers.diffpir.utils.utils_resizer import Resizer
-from delires.diffusers.diffpir.utils.delires_utils import (
+from delires.methods.diffpir.utils import utils_model
+from delires.methods.diffpir.utils import utils_logger
+from delires.methods.diffpir.utils import utils_sisr as sr
+from delires.methods.diffpir.utils import utils_image as util
+from delires.methods.diffpir.utils.utils_resizer import Resizer
+from delires.methods.diffpir.utils.delires_utils import (
     create_downsampled_image, 
     get_downsample_kernel, 
     manually_build_image_path, 
@@ -26,7 +26,7 @@ from delires.diffusers.diffpir.utils.delires_utils import (
 )
 
 # from guided_diffusion import dist_util
-from delires.diffusers.diffpir.guided_diffusion.script_util import (
+from delires.methods.diffpir.guided_diffusion.script_util import (
     NUM_CLASSES,
     model_and_diffusion_defaults,
     create_model_and_diffusion,

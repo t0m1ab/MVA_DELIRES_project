@@ -9,8 +9,8 @@ import glob
 import delires.utils.utils as utils
 from delires.utils.utils_logger import logger_info
 import delires.utils.utils_image as utils_image
-from delires.diffusers.register import DIFFUSER_TYPE, DIFFUSERS
-from delires.diffusers.diffpir.diffpir_configs import DiffPIRConfig, DiffPIRDeblurConfig
+from delires.methods.register import DIFFUSER_TYPE, DIFFUSERS
+from delires.methods.diffpir.diffpir_configs import DiffPIRConfig, DiffPIRDeblurConfig
 from delires.data import all_files_exist
 from delires.metrics import compute_metrics
 

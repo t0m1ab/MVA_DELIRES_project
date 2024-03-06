@@ -2,9 +2,9 @@
 .venv/*
 **/__pycache__/
 
-delires/diffusers/diffpir/figs/
-delires/diffusers/diffpir/model_zoo/
-delires/diffusers/diffpir/results/
+delires/methods/diffpir/figs/
+delires/methods/diffpir/model_zoo/
+delires/methods/diffpir/results/
 
 delires/data/degraded_datasets
 delires/results/

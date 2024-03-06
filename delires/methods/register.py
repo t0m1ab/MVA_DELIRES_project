@@ -1,7 +1,7 @@
 from typing import Literal
 
-from delires.diffusers.diffpir.diffpir_diffuser import DiffPIRDiffuser
-from delires.diffusers.dps.dps_diffuser import DPSDiffuser
+from delires.methods.diffpir.diffpir_diffuser import DiffPIRDiffuser
+from delires.methods.dps.dps_diffuser import DPSDiffuser
 
 
 DIFFUSER_TYPE = Literal["diffpir"]

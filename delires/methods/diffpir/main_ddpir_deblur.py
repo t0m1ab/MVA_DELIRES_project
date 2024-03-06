@@ -10,11 +10,11 @@ from collections import OrderedDict
 import hdf5storage
 from scipy import ndimage
 
-from delires.diffusers.diffpir.utils import utils_model
-from delires.diffusers.diffpir.utils import utils_logger
-from delires.diffusers.diffpir.utils import utils_sisr as sr
-from delires.diffusers.diffpir.utils import utils_image as util
-from delires.diffusers.diffpir.utils.utils_deblur import MotionBlurOperator, GaussialBlurOperator
+from delires.methods.diffpir.utils import utils_model
+from delires.methods.diffpir.utils import utils_logger
+from delires.methods.diffpir.utils import utils_sisr as sr
+from delires.methods.diffpir.utils import utils_image as util
+from delires.methods.diffpir.utils.utils_deblur import MotionBlurOperator, GaussialBlurOperator
 
 # from guided_diffusion import dist_util
 from guided_diffusion.script_util import (
