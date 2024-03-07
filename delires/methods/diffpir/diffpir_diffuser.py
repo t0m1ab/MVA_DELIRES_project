@@ -1,11 +1,10 @@
 import os
 from pathlib import Path
-from logging import Logger, getLogger
 import numpy as np
 import torch
+from logging import Logger
 
 from delires.data import load_downsample_kernel, load_blur_kernel
-from delires.utils.utils_logger import logger_info
 from delires.methods.diffuser import Diffuser
 from delires.methods.diffpir.diffpir_configs import DiffPIRConfig, DiffPIRDeblurConfig
 from delires.methods.diffpir.utils import utils_image
@@ -31,24 +30,19 @@ from delires.params import (
 
 class DiffPIRDiffuser(Diffuser):
 
-    def __init__(self, config: DiffPIRConfig, logger: Logger = None, autolog: str = None, **kwargs):
+    def __init__(self, config: DiffPIRConfig, logger: Logger = None, autolog: str = None, device = "cpu"):
+        super().__init__(device=device, logger=logger, autolog=autolog)
 
         self.config = config
-        self.logger = logger
 
-        if autolog is not None and self.logger is None: # create a logger if not provided but if autolog is specified
-            Path(RESTORED_DATA_PATH).mkdir(parents=True, exist_ok=True)
-            logger_info(autolog, log_path=os.path.join(RESTORED_DATA_PATH, f"{autolog}.log"))
-            self.logger = getLogger(autolog)
-    
         self.model: UNetModel = None
         self.diffusion: SpacedDiffusion = None
         self.load_model(config) # store in self.model and self.diffusion
         self.device = config.device
 
         # SISR
-        self.classical_degradation = kwargs.get("sisr_classical_degradation", False)
-        self.sf: int = kwargs.get("sf", 4)
+        self.classical_degradation = getattr(config, "sisr_classical_degradation", False)
+        self.sf: int = getattr(config, "sf", 4)
 
         # Deblurring
         self.kernel_filename: str = None
@@ -166,6 +160,7 @@ class DiffPIRDiffuser(Diffuser):
             model=self.model,
             diffusion=self.diffusion,
             logger=self.logger,
+            device=self.device
         )
 
         # save restored image

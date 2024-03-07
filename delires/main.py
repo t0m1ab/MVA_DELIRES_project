@@ -63,7 +63,7 @@ def run_experiment(
     kernel_name = dataset_infos["kernel_name"] if "kernel_name" in dataset_infos else None
     if kernel_name is None:
         raise ValueError("No kernel found for the given dataset. Please manually select a kernel.")
-    diffpir_diffuser = DIFFUSERS[diffuser_type](diffuser_config, logger=logger)
+    diffpir_diffuser = DIFFUSERS[diffuser_type](diffuser_config, logger=logger, device=device)
     diffpir_diffuser.load_blur_kernel(kernel_name)
     
     # check the datasets (same number of images, same names, same extensions, etc.)

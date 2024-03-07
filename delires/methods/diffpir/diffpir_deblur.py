@@ -69,6 +69,7 @@ def apply_DiffPIR_for_deblurring(
         diffusion: SpacedDiffusion,
         img_ext: str = "png",
         logger: Logger = None,
+        device = "cpu"
     ) -> tuple[np.ndarray, dict]:
     """
     Apply the Diffusion PIR method to deblur an image.
@@ -96,11 +97,6 @@ def apply_DiffPIR_for_deblurring(
     Define the configuration, the logger and the device to be used.
     """
 
-    # setup device
-    device = torch.device("cpu")
-    if config.device == "cuda" and torch.cuda.is_available():
-        device = torch.device("cuda")
-        torch.cuda.empty_cache()
     if config.calc_LPIPS:
         import lpips
         loss_fn_vgg = lpips.LPIPS(net='vgg').to(device)

@@ -1,14 +1,26 @@
+import os
 import numpy as np
-from typing import Literal, Union
+from pathlib import Path
+from logging import Logger, getLogger
+
 
 from delires.data import load_downsample_kernel, load_blur_kernel
+from delires.utils.utils_logger import logger_info
+
+from delires.params import (
+    RESTORED_DATA_PATH,
+)
 
 
 class Diffuser():
-    def __init__(self, device = "cpu", **kwargs):
-        self.classical_degradation = kwargs.get("sisr_classical_degradation", False)
-        self.sf = kwargs.get("sf", 4)
+    def __init__(self, logger: Logger = None, autolog: str = None, device = "cpu"):
         self.device = device
+        self.logger = logger
+
+        if autolog is not None and self.logger is None: # create a logger if not provided but if autolog is specified
+            Path(RESTORED_DATA_PATH).mkdir(parents=True, exist_ok=True)
+            logger_info(autolog, log_path=os.path.join(RESTORED_DATA_PATH, f"{autolog}.log"))
+            self.logger = getLogger(autolog)
 
     def load_downsample_kernel(
         self,
