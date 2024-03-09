@@ -24,6 +24,22 @@ def all_files_exist(filenames: list[str], ext: str = None, path: str = None) -> 
 
 # BLURRING
 
+def blur(image: np.ndarray, kernel: np.ndarray):
+    """
+    Apply a blur kernel to an image. 
+    
+    ARGUMENTS:
+        - image: np.ndarray, the image to blur.
+        - kernel: np.ndarray with 2 dimension, the blur kernel in float.
+        
+    RETURNS:
+        - np.ndarray, the blurred image.
+    """
+    # mode='wrap' is important for analytical solution
+    blurred_img = ndimage.convolve(image, np.expand_dims(kernel, axis=2), mode='wrap')
+    return blurred_img
+
+
 def create_blur_kernel(
     blur_mode: str,
     kernel_size: int,
@@ -84,7 +100,7 @@ def create_blurred_and_noised_image(
     clean_img = utils_image.modcrop(clean_img, 8)  # modcrop
 
     # mode='wrap' is important for analytical solution
-    degraded_img = ndimage.convolve(clean_img, np.expand_dims(kernel, axis=2), mode='wrap')
+    degraded_img = blur(clean_img, kernel)
     utils_image.imshow(degraded_img) if show_img else None
     degraded_img = utils_image.uint2single(degraded_img)
 
@@ -273,7 +289,7 @@ def main():
     seed = 0
     kernel_name = "gaussian_kernel_05"
     noise_level_img = 12.75/255.0 # 0.05
-    blur_kernel = create_blur_kernel("Gaussian", 61, seed, kernel_name, "cpu")
+    # blur_kernel = create_blur_kernel("Gaussian", 61, seed, kernel_name, "cpu")
     blur_kernel = load_blur_kernel(kernel_name)
     generate_degraded_dataset_blurred("blurred_dataset", blur_kernel, kernel_name, 3, noise_level_img, seed, False)
     return

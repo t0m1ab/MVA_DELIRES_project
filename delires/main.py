@@ -7,10 +7,11 @@ import torch
 
 import delires.utils.utils as utils
 from delires.utils.utils_logger import logger_info
+import delires.utils.utils_image as utils_image
 from delires.methods.register import DIFFUSER_TYPE, DIFFUSERS
 from delires.methods.diffpir.diffpir_configs import DiffPIRConfig, DiffPIRDeblurConfig
 from delires.data import all_files_exist
-from delires.metrics import compute_metrics
+from delires.metrics import data_consistency_norm, report_metrics
 
 from delires.params import (
     TASK,
@@ -71,20 +72,21 @@ def run_experiment(
     logger.info(f"### Starting experiment {exp_name} with {diffuser_type} for {task} task on device {device}.")
     exp_metrics = {
         "PSNR": {},  # computed on-the-run
-        "data_fit": {},  # computed on-the-run
-        "std_over_image": {},  # computed from generated images
-        "FID": {},  # computed from generated images
+        "l2_residual": {},  # computed from generated images
+        "average_image_std": {},  # computed from generated images
+        "FID": {},  # TODO
         "coverage": {},  # TODO
         "LPIPS": {},  # computed on-the-run
         }
     for img_name in dataset_infos["images"]:
         img_psnr = []
-        img_data_fit = []
-        img_std_over_image = []
+        img_l2_residual = []
         img_fid = []
         img_coverage = []
         img_lpips = []
         
+        gen_images = []
+
         for gen_idx in range(nb_gen):
 
             # apply the method (don't save the image in apply_task by default because there are multiple generations to save)
@@ -109,16 +111,25 @@ def run_experiment(
             
             # compute and store metrics
             img_psnr.append(metrics["psnr"])
-            img_data_fit.append(0)  # TODO
-            img_std_over_image.append(0)
+            img_l2_residual.append(data_consistency_norm(degraded_dataset_name, img_name, restored_image, task, kernel_name))
             img_fid.append(0)
             img_coverage.append(0)
             img_lpips.append(metrics["lpips"])
             
+            gen_images.append(restored_image)
+        
+        # Save std image of generated restorations
+        std_image = np.mean(np.std(gen_images, axis=0), axis=-1)
+        diffpir_diffuser.save_restored_image(
+            restored_image=std_image,
+            restored_image_filename=f"standard_deviation",
+            path=os.path.join(RESTORED_DATA_PATH, exp_name, f"img_{img_name}"),
+            save_std=True
+        )
             
         exp_metrics["PSNR"][img_name] = list(img_psnr)
-        exp_metrics["data_fit"][img_name] = img_data_fit
-        exp_metrics["std_over_image"][img_name] = img_std_over_image
+        exp_metrics["l2_residual"][img_name] = img_l2_residual
+        exp_metrics["average_image_std"][img_name] = [np.mean(std_image)]
         exp_metrics["FID"][img_name] = img_fid
         exp_metrics["coverage"][img_name] = img_coverage
         exp_metrics["LPIPS"][img_name] = list(img_lpips)
@@ -126,7 +137,7 @@ def run_experiment(
     # save metrics
     np.savez(os.path.join(RESTORED_DATA_PATH, exp_name, "metrics.npz"), **exp_metrics)
     
-    utils.report_metrics(exp_metrics, os.path.join(RESTORED_DATA_PATH, exp_name, "metrics.csv"))        
+    report_metrics(exp_metrics, os.path.join(RESTORED_DATA_PATH, exp_name, "metrics.csv"))        
     
 
 def main():

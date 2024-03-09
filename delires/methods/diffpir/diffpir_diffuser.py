@@ -93,13 +93,17 @@ class DiffPIRDiffuser(Diffuser):
             restored_image_filename: str,
             path: str = None,
             img_ext: str = "png",
+            save_std: bool = False
         ):
         path = path if path is not None else RESTORED_DATA_PATH
         Path(path).mkdir(parents=True, exist_ok=True)
         restored_image_path = os.path.join(path, f"{restored_image_filename}.{img_ext}")
         utils_image.imsave(restored_image, restored_image_path)
         if self.logger is not None:
-            self.logger.info(f"Restored image saved in: {restored_image_path}")
+            if save_std:
+                self.logger.info(f"Standard deviation of restored images saved in: {restored_image_path}")
+            else:
+                self.logger.info(f"Restored image saved in: {restored_image_path}")
         
     def apply_debluring(
             self,
