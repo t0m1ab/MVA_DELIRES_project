@@ -4,11 +4,9 @@ from tqdm import tqdm
 import numpy as np
 import logging
 import torch
-import glob
 
 import delires.utils.utils as utils
 from delires.utils.utils_logger import logger_info
-import delires.utils.utils_image as utils_image
 from delires.methods.register import DIFFUSER_TYPE, DIFFUSERS
 from delires.methods.diffpir.diffpir_configs import DiffPIRConfig, DiffPIRDeblurConfig
 from delires.data import all_files_exist
@@ -16,8 +14,6 @@ from delires.metrics import compute_metrics
 
 from delires.params import (
     TASK,
-    MODELS_PATH,
-    KERNELS_PATH, 
     CLEAN_DATA_PATH, 
     DEGRADED_DATA_PATH, 
     RESTORED_DATA_PATH,
@@ -49,9 +45,6 @@ def run_experiment(
         if torch.cuda.is_available():
             device = torch.device("cuda")
             torch.cuda.empty_cache()
-    if calc_LPIPS:
-        import lpips
-        loss_fn_vgg = lpips.LPIPS(net='vgg').to(device)
     
     # create logger for the experiment
     logger_name = exp_name
@@ -76,11 +69,22 @@ def run_experiment(
 
     # apply the method over the dataset
     logger.info(f"### Starting experiment {exp_name} with {diffuser_type} for {task} task on device {device}.")
-    exp_metrics = {"PSNR": {}} # TODO: other metrics
+    exp_metrics = {
+        "PSNR": {},  # computed on-the-run
+        "data_fit": {},  # computed on-the-run
+        "std_over_image": {},  # computed from generated images
+        "FID": {},  # computed from generated images
+        "coverage": {},  # TODO
+        "LPIPS": {},  # computed on-the-run
+        }
     for img_name in dataset_infos["images"]:
+        img_psnr = []
+        img_data_fit = []
+        img_std_over_image = []
+        img_fid = []
+        img_coverage = []
+        img_lpips = []
         
-        psnr_values = []
-        # lpips_values = []
         for gen_idx in range(nb_gen):
 
             # apply the method (don't save the image in apply_task by default because there are multiple generations to save)
@@ -99,26 +103,30 @@ def run_experiment(
             # save the restored image (with "_genX" suffix where X is the generation index)
             diffpir_diffuser.save_restored_image(
                 restored_image=restored_image,
-                restored_image_filename=f"{img_name}_gen{gen_idx}",
-                path=os.path.join(RESTORED_DATA_PATH, exp_name),
+                restored_image_filename=f"gen{gen_idx}",
+                path=os.path.join(RESTORED_DATA_PATH, exp_name, f"img_{img_name}"),
             )
             
-            # compute metrics
-            psnr_values.append(metrics["psnr"])
-            #### LIGNE MAGINOT !!!! BLITZKRIEG POUVANT TOMBER A TOUT MOMENT !!!!
-            if calc_LPIPS:
-                raise NotImplementedError
-                # lpips_img = ...
-                # lpips_values.append(lpips_img)
+            # compute and store metrics
+            img_psnr.append(metrics["psnr"])
+            img_data_fit.append(0)  # TODO
+            img_std_over_image.append(0)
+            img_fid.append(0)
+            img_coverage.append(0)
+            img_lpips.append(metrics["lpips"])
             
-        exp_metrics["PSNR"][img_name] = list(psnr_values)
-        # metrics["LPIPS"][img_name] = list(lpips_values)
+            
+        exp_metrics["PSNR"][img_name] = list(img_psnr)
+        exp_metrics["data_fit"][img_name] = img_data_fit
+        exp_metrics["std_over_image"][img_name] = img_std_over_image
+        exp_metrics["FID"][img_name] = img_fid
+        exp_metrics["coverage"][img_name] = img_coverage
+        exp_metrics["LPIPS"][img_name] = list(img_lpips)
         
     # save metrics
     np.savez(os.path.join(RESTORED_DATA_PATH, exp_name, "metrics.npz"), **exp_metrics)
     
-    ### TODO: fix this monkeyness
-    utils.report_metrics(metrics, os.path.join(RESTORED_DATA_PATH, exp_name, "metrics.txt"))        
+    utils.report_metrics(exp_metrics, os.path.join(RESTORED_DATA_PATH, exp_name, "metrics.csv"))        
     
 
 def main():
@@ -133,7 +141,7 @@ def main():
         degraded_dataset_name=degraded_dataset_name,
         diffuser_config=DiffPIRConfig(),
         diffuser_task_config=DiffPIRDeblurConfig(),
-        nb_gen=1,
+        nb_gen=2,
         kernel_name=None,
         calc_LPIPS=False,
     )

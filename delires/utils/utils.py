@@ -10,13 +10,17 @@ def load_json(filename: str) -> dict:
 
 
 def report_metrics(metrics, exp_path):
+    img_names = list(metrics["PSNR"].keys())
     with open(exp_path, mode='w') as file:
         writer = csv.writer(file, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
-        fields = ["img", "PSNR", "MSE", "Var_img", "Var_avg", "FID", "Cov"]
+        fields = ["img", "PSNR", "data_fit", "std_over_image", "FID", "coverage", "LPIPS"]
         writer.writerow(fields)
-        writer.writerow(["Overall"] + [np.mean(metric) for metric in metrics])
-        for i in range(len(metrics["PSNR"])):
-            writer.writerow([i, np.mean(metrics["PSNR"][i])])
+        writer.writerow(["Overall"] + [np.mean(list(metrics[field].values())) for field in fields[1:]])
+        for img in img_names:
+            writer.writerow(
+                [img]
+                + [np.mean(metrics[field][img]) for field in fields[1:]]
+                )
             
             
 def archive_kwargs(kwargs, path):
