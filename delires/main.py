@@ -11,7 +11,8 @@ import delires.utils.utils_image as utils_image
 from delires.methods.register import DIFFUSER_TYPE, DIFFUSERS
 from delires.methods.diffpir.diffpir_configs import DiffPIRConfig, DiffPIRDeblurConfig
 from delires.data import all_files_exist
-from delires.metrics import data_consistency_norm, report_metrics
+from delires.fid import fid_score
+from delires.metrics import data_consistency_norm, report_metrics, save_std_image
 
 from delires.params import (
     TASK,
@@ -30,7 +31,6 @@ def run_experiment(
     diffuser_task_config: DiffPIRDeblurConfig,
     nb_gen: int = 1,
     kernel_name: str|None = None,
-    calc_LPIPS: bool = False
     ):
     """ 
     Run an experiment for a given method.
@@ -74,14 +74,12 @@ def run_experiment(
         "PSNR": {},  # computed on-the-run
         "l2_residual": {},  # computed from generated images
         "average_image_std": {},  # computed from generated images
-        "FID": {},  # TODO
         "coverage": {},  # TODO
         "LPIPS": {},  # computed on-the-run
         }
-    for img_name in dataset_infos["images"]:
+    for img_name in dataset_infos["images"][:2]:
         img_psnr = []
         img_l2_residual = []
-        img_fid = []
         img_coverage = []
         img_lpips = []
         
@@ -112,7 +110,6 @@ def run_experiment(
             # compute and store metrics
             img_psnr.append(metrics["psnr"])
             img_l2_residual.append(data_consistency_norm(degraded_dataset_name, img_name, restored_image, task, kernel_name))
-            img_fid.append(0)
             img_coverage.append(0)
             img_lpips.append(metrics["lpips"])
             
@@ -120,24 +117,22 @@ def run_experiment(
         
         # Save std image of generated restorations
         std_image = np.mean(np.std(gen_images, axis=0), axis=-1)
-        diffpir_diffuser.save_restored_image(
-            restored_image=std_image,
-            restored_image_filename=f"standard_deviation",
-            path=os.path.join(RESTORED_DATA_PATH, exp_name, f"img_{img_name}"),
-            save_std=True
-        )
+        save_std_image(exp_name, img_name, std_image)
             
         exp_metrics["PSNR"][img_name] = list(img_psnr)
         exp_metrics["l2_residual"][img_name] = img_l2_residual
         exp_metrics["average_image_std"][img_name] = [np.mean(std_image)]
-        exp_metrics["FID"][img_name] = img_fid
         exp_metrics["coverage"][img_name] = img_coverage
         exp_metrics["LPIPS"][img_name] = list(img_lpips)
         
-    # save metrics
+    # Save metrics once before computing FID
     np.savez(os.path.join(RESTORED_DATA_PATH, exp_name, "metrics.npz"), **exp_metrics)
     
-    report_metrics(exp_metrics, os.path.join(RESTORED_DATA_PATH, exp_name, "metrics.csv"))        
+    # Compute FID and save metrics
+    fid = fid_score.calculate_fid_given_paths(paths=[CLEAN_DATA_PATH, os.path.join(RESTORED_DATA_PATH, exp_name)], batch_size=5, device=device, dims=2048)
+    np.savez(os.path.join(RESTORED_DATA_PATH, exp_name, "metrics.npz"), **exp_metrics, fid=fid)
+    
+    report_metrics(exp_metrics, fid, os.path.join(RESTORED_DATA_PATH, exp_name, "metrics.csv"))        
     
 
 def main():
@@ -154,9 +149,8 @@ def main():
         diffuser_task_config=DiffPIRDeblurConfig(),
         nb_gen=2,
         kernel_name=None,
-        calc_LPIPS=False,
     )
 
 
 if __name__ == "__main__":
-    main()
+    main()    
