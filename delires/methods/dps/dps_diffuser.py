@@ -30,24 +30,18 @@ from delires.params import (
 
 class DPSDiffuser(Diffuser):
 
-    def __init__(self, config: DPSConfig, logger: Logger = None, autolog: str = None, **kwargs):
+    def __init__(self, config: DPSConfig, logger: Logger = None, autolog: str = None, device = "cpu"):
+        super().__init__(device=device, logger=logger, autolog=autolog)
 
         self.config = config
-        self.logger = logger
-
-        if autolog is not None and self.logger is None: # create a logger if not provided but if autolog is specified
-            Path(RESTORED_DATA_PATH).mkdir(parents=True, exist_ok=True)
-            logger_info(autolog, log_path=os.path.join(RESTORED_DATA_PATH, f"{autolog}.log"))
-            self.logger = getLogger(autolog)
     
         self.model: UNet2DModel = None # torch.nn.Module object
         self.scheduler: DDPMScheduler = None # ddpmscheduler object
         self.load_model(config) # store in self.model and self.diffusion
-        self.device = config.device
 
         # SISR
-        self.classical_degradation = kwargs.get("sisr_classical_degradation", False)
-        self.sf: int = kwargs.get("sf", 4)
+        self.classical_degradation = getattr(config, "sisr_classical_degradation", False)
+        self.sf: int = getattr(config, "sf", 4)
 
         # Deblurring
         self.kernel_filename: str = None
@@ -173,6 +167,7 @@ class DPSDiffuser(Diffuser):
             scheduler=self.scheduler,
             diffusion=self.diffusion,
             logger=self.logger,
+            device = self.device
         )
 
         # save restored image
@@ -196,17 +191,23 @@ class DPSDiffuser(Diffuser):
 def main():
 
     # quick demo of the DPS deblurring
+    
+    # setup device
+    device = torch.device("cpu")
+    if torch.cuda.is_available():
+        device = torch.device("cuda")
+        torch.cuda.empty_cache()
 
     dps_config = DPSConfig()
-    dps_diffuser = DPSDiffuser(dps_config, autolog="dps_debluring_test")
+    dps_diffuser = DPSDiffuser(dps_config, autolog="dps_debluring_test", device=device)
 
     dps_diffuser.load_blur_kernel("gaussian_kernel_05")
     # dps_diffuser.load_blur_kernel("motion_kernel_1")
 
-    diffpir_deblur_config = DPSDeblurConfig()
+    dps_deblur_config = DPSDeblurConfig()
     img_name = "theilo"
     _ = dps_diffuser.apply_debluring(
-        config=diffpir_deblur_config,
+        config=dps_deblur_config,
         clean_image_filename=img_name,
         degraded_image_filename=img_name,
         degraded_dataset_name="blurred_dataset",

@@ -2,14 +2,13 @@ from dataclasses import dataclass
 
 
 @dataclass
-class DPSConfig:
-    model_name: str     = "diffusion_ffhq_10m"    # diffusion_ffhq_10m | 256x256_diffusion_uncond | google/ddpm-ema-celebahq-256
+class PiGDMConfig:
+    model_name: str     = "google/ddpm-ema-celebahq-256"    # diffusion_ffhq_10m | 256x256_diffusion_uncond | google/ddpm-ema-celebahq-256
 
 
 @dataclass
-class DPSDeblurConfig(DPSConfig):
-    model_name: str     = "diffusion_ffhq_10m"    # diffusion_ffhq_10m | 256x256_diffusion_uncond | google/ddpm-ema-celebahq-256
-
+class PiGDMDeblurConfig(PiGDMConfig):
+    
     timesteps: int      = 50                                # number of timesteps for scheduler
     noise_level_img     = 12.75/255.0                       # set AWGN noise level for LR image, default: 0
     num_train_timesteps = 1000
@@ -33,8 +32,8 @@ SCHEDULER_CONFIG = {
 
 
 def main():
-    print(DPSConfig())
-    print(DPSDeblurConfig())
+    print(PiGDMConfig())
+    print(PiGDMDeblurConfig())
 
 
 if __name__ == "__main__":

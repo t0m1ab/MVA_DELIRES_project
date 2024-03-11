@@ -14,9 +14,9 @@ import hdf5storage
 import matplotlib.pyplot as plt
 from pycocotools.coco import COCO
 
-import utils.utils_image as util
-import utils.utils_sisr as sisr
-import utils.utils_deblur as deblur
+import delires.methods.dps_pigdm_utils.utils_image as util
+import delires.methods.dps_pigdm_utils.utils_sisr as sisr
+import delires.methods.dps_pigdm_utils.utils_deblur as deblur
 
 
 

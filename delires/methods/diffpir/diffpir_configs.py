@@ -4,7 +4,6 @@ from dataclasses import dataclass
 @dataclass
 class DiffPIRConfig:
     model_name: str     = "diffusion_ffhq_10m"      # diffusion_ffhq_10m | 256x256_diffusion_uncond
-    device: str         = "cuda"                    # cpu | cuda
 
 
 @dataclass
@@ -46,7 +45,6 @@ class DiffPIRDeblurConfig(DiffPIRConfig):
     n_channels          = 3             # fixed
     cwd                 = ''  
     seed                = 0             # fixed
-    device              = 'cuda'        # fixed
 
 
 def main():

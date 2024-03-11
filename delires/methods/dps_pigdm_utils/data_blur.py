@@ -3,7 +3,7 @@ import torch.utils.data as data
 from scipy.io import loadmat
 import random
 
-import utils.utils_agem as agem
+import delires.methods.dps_pigdm_utils.utils_agem as agem
 import utils.utils_image as util
 
 

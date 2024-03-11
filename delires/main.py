@@ -42,10 +42,9 @@ def run_experiment(
       
     # setup device
     device = torch.device("cpu")
-    if diffuser_config.device == "cuda" or diffuser_task_config.device == "cuda":
-        if torch.cuda.is_available():
-            device = torch.device("cuda")
-            torch.cuda.empty_cache()
+    if torch.cuda.is_available():
+        device = torch.device("cuda")
+        torch.cuda.empty_cache()
     
     # create logger for the experiment
     logger_name = exp_name
@@ -113,7 +112,7 @@ def run_experiment(
             img_coverage.append(0)
             img_lpips.append(metrics["lpips"])
             
-            gen_images.append(restored_image)
+            gen_images.append(utils_image.single2uint(restored_image))
         
         # Save std image of generated restorations
         std_image = np.mean(np.std(gen_images, axis=0), axis=-1)

@@ -1,17 +1,17 @@
 import os
 from pathlib import Path
+from logging import Logger, getLogger
 import numpy as np
 import torch
-from logging import Logger
+from diffusers import DDPMPipeline, DDPMScheduler, UNet2DModel
 
 from delires.data import load_downsample_kernel, load_blur_kernel
+from delires.utils.utils_logger import logger_info
+from delires.utils import utils_image
 from delires.methods.diffuser import Diffuser
-from delires.methods.diffpir.diffpir_configs import DiffPIRConfig, DiffPIRDeblurConfig
-from delires.methods.diffpir.utils import utils_image
+from delires.methods.pigdm.pigdm_configs import PiGDMConfig, PiGDMDeblurConfig, SCHEDULER_CONFIG
 from delires.methods.diffpir.utils import utils_model
-from delires.methods.diffpir.guided_diffusion.unet import UNetModel
-from delires.methods.diffpir.guided_diffusion.respace import SpacedDiffusion
-from delires.methods.diffpir.diffpir_deblur import apply_DiffPIR_for_deblurring
+from delires.methods.pigdm.pigdm_deblur import apply_PiGDM_for_deblurring
 
 from delires.methods.diffpir.guided_diffusion.script_util import (
     model_and_diffusion_defaults,
@@ -26,17 +26,17 @@ from delires.params import (
     DEGRADED_DATA_PATH,    
     RESTORED_DATA_PATH,
 )
+# DDPMPipeline.from_pretrained(model_name)
 
+class PiGDMDiffuser(Diffuser):
 
-class DiffPIRDiffuser(Diffuser):
-
-    def __init__(self, config: DiffPIRConfig, logger: Logger = None, autolog: str = None, device = "cpu"):
+    def __init__(self, config: PiGDMConfig, logger: Logger = None, autolog: str = None, device = "cpu"):
         super().__init__(device=device, logger=logger, autolog=autolog)
 
         self.config = config
-
-        self.model: UNetModel = None
-        self.diffusion: SpacedDiffusion = None
+    
+        self.model: UNet2DModel = None # torch.nn.Module object
+        self.scheduler: DDPMScheduler = None # ddpmscheduler object
         self.load_model(config) # store in self.model and self.diffusion
 
         # SISR
@@ -59,32 +59,39 @@ class DiffPIRDiffuser(Diffuser):
         self.kernel = load_blur_kernel(kernel_filename)
         self.kernel_filename = kernel_filename
     
-    def load_model(self, config: DiffPIRConfig) -> None:
+    def load_model(self, config: PiGDMConfig) -> None:
         """ Load the model and diffusion objects from the given config. """
-
-        model_path = os.path.join(MODELS_PATH, f"{config.model_name}.pt")
         
-        if config.model_name == "diffusion_ffhq_10m":
-            model_config = dict(
-                model_path=model_path,
-                num_channels=128,
-                num_res_blocks=1,
-                attention_resolutions="16",
-            )
+        if not config.model_name.startswith("google"):
+            model_path = os.path.join(MODELS_PATH, f"{config.model_name}.pt")
+            if config.model_name == "diffusion_ffhq_10m":
+                model_config = dict(
+                    model_path=model_path,
+                    num_channels=128,
+                    num_res_blocks=1,
+                    attention_resolutions="16",
+                )
+            elif config.model_name == "256x256_diffusion_uncond":
+                model_config = dict(
+                    model_path=model_path,
+                    num_channels=256,
+                    num_res_blocks=2,
+                    attention_resolutions="8,16,32",
+                )
+            args = utils_model.create_argparser(model_config).parse_args([])
+            model, diffusion = create_model_and_diffusion(**args_to_dict(args, model_and_diffusion_defaults().keys()))
+            model.load_state_dict(torch.load(args.model_path, map_location="cpu"))
+            self.model = model
+            self.diffusion = diffusion
+
+        elif config.model_name == "google/ddpm-ema-celebahq-256":
+            self.model = DDPMPipeline.from_pretrained(config.model_name).unet
+            self.diffusion = None
+
         else:
-            model_config = dict(
-                model_path=model_path,
-                num_channels=256,
-                num_res_blocks=2,
-                attention_resolutions="8,16,32",
-            )
-
-        args = utils_model.create_argparser(model_config).parse_args([])
-        model, diffusion = create_model_and_diffusion(**args_to_dict(args, model_and_diffusion_defaults().keys()))
-        model.load_state_dict(torch.load(args.model_path, map_location="cpu"))
-
-        self.model = model
-        self.diffusion = diffusion
+            raise KeyError(f"Unknown model name: {config.model_name}")
+        
+        self.scheduler = DDPMScheduler.from_config(config=SCHEDULER_CONFIG)
 
     def save_restored_image(
             self, 
@@ -102,7 +109,7 @@ class DiffPIRDiffuser(Diffuser):
         
     def apply_debluring(
             self,
-            config: DiffPIRDeblurConfig,
+            config: PiGDMDeblurConfig,
             clean_image_filename: str,
             degraded_image_filename: str,
             degraded_dataset_name: str = None,
@@ -129,16 +136,16 @@ class DiffPIRDiffuser(Diffuser):
             - metrics: dict {metric_name: metric_value} containing the metrics of the deblurring.
         """
 
-        if self.model is None or self.diffusion is None:
-            raise ValueError("The model and diffusion objects must be loaded before applying deblurring.")
+        if self.model is None or self.scheduler is None:
+            raise ValueError("The model and scheduler objects must be loaded before applying deblurring.")
 
         # load images
         degraded_dataset_name = degraded_dataset_name if degraded_dataset_name is not None else ""
         clean_image_png_path = os.path.join(CLEAN_DATA_PATH, f"{clean_image_filename}.{img_ext}")
-        degraded_image_np_path = os.path.join(DEGRADED_DATA_PATH, degraded_dataset_name, f"{degraded_image_filename}.npy")
+        degraded_image_png_path = os.path.join(DEGRADED_DATA_PATH, degraded_dataset_name, f"{degraded_image_filename}.png")
 
         clean_image = utils_image.imread_uint(clean_image_png_path)
-        degraded_image = np.load(degraded_image_np_path)
+        degraded_image = utils_image.imread_uint(degraded_image_png_path)
 
         # load kernel if necessary (otherwise use self.kernel and self.kernel_filename)
         if kernel_filename is not None:
@@ -148,7 +155,7 @@ class DiffPIRDiffuser(Diffuser):
             raise ValueError("The blur kernel must be loaded before applying deblurring.")
 
         # apply DiffPIR deblurring
-        restored_image, metrics = apply_DiffPIR_for_deblurring(
+        restored_image, metrics = apply_PiGDM_for_deblurring(
             config=config,
             clean_image_filename=clean_image_filename,
             degraded_image_filename=degraded_image_filename,
@@ -157,9 +164,10 @@ class DiffPIRDiffuser(Diffuser):
             degraded_image=degraded_image,
             kernel=self.kernel,
             model=self.model,
+            scheduler=self.scheduler,
             diffusion=self.diffusion,
             logger=self.logger,
-            device=self.device
+            device=self.device,
         )
 
         # save restored image
@@ -182,25 +190,24 @@ class DiffPIRDiffuser(Diffuser):
 
 def main():
 
-    # quick demo of the DiffPIR deblurring
-
+    # quick demo of the PiGDM deblurring
+    
     # setup device
     device = torch.device("cpu")
     if torch.cuda.is_available():
         device = torch.device("cuda")
         torch.cuda.empty_cache()
 
+    pigdm_config = PiGDMConfig()
+    pigdm_diffuser = PiGDMDiffuser(pigdm_config, autolog="pigdm_debluring_test", device=device)
 
-    diffpir_config = DiffPIRConfig()
-    diffpir_diffuser = DiffPIRDiffuser(diffpir_config, autolog="diffpir_debluring_test", device=device)
+    pigdm_diffuser.load_blur_kernel("gaussian_kernel_05")
+    # pigdm_diffuser.load_blur_kernel("motion_kernel_1")
 
-    diffpir_diffuser.load_blur_kernel("gaussian_kernel_05")
-    # diffpir_diffuser.load_blur_kernel("motion_kernel_1")
-
-    diffpir_deblur_config = DiffPIRDeblurConfig()
-    img_name = "theilo"
-    _ = diffpir_diffuser.apply_debluring(
-        config=diffpir_deblur_config,
+    pigdm_deblur_config = PiGDMDeblurConfig()
+    img_name = "69037"
+    _ = pigdm_diffuser.apply_debluring(
+        config=pigdm_deblur_config,
         clean_image_filename=img_name,
         degraded_image_filename=img_name,
         degraded_dataset_name="blurred_dataset",
