@@ -3,18 +3,16 @@ from dataclasses import dataclass
 
 @dataclass
 class PiGDMConfig:
-    model_name: str     = "google/ddpm-ema-celebahq-256"    # diffusion_ffhq_10m | 256x256_diffusion_uncond | google/ddpm-ema-celebahq-256
+    model_name: str     = "diffusion_ffhq_10m"    # diffusion_ffhq_10m | 256x256_diffusion_uncond | google/ddpm-ema-celebahq-256
+    num_train_timesteps = 1000
 
 
 @dataclass
 class PiGDMDeblurConfig(PiGDMConfig):
-    
-    timesteps: int      = 50                                # number of timesteps for scheduler
+    timesteps: int      = 100                               # number of timesteps for scheduler
     noise_level_img     = 12.75/255.0                       # set AWGN noise level for LR image, default: 0
-    num_train_timesteps = 1000
     iter_num            = 10                                # set number of iterations
     ddim_sample         = False                             # sampling method
-
     lambda_             = 1.0                               # key parameter lambda
 
 

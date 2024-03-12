@@ -1,3 +1,4 @@
+from typing import Callable
 import numpy as np
 import torch
 from tqdm import tqdm
@@ -5,8 +6,9 @@ from logging import Logger
 from diffusers import DDPMPipeline, DDPMScheduler, UNet2DModel
 
 from delires.utils.utils_image import get_infos_img
-import delires.methods.dps_pigdm_utils.utils_agem as utils_agem
-import delires.methods.dps_pigdm_utils.utils_image as utils_image
+import delires.methods.utils.utils_agem as utils_agem
+import delires.methods.utils.utils_image as utils_image
+from delires.methods.utils.utils import adapt_kernel_dps_pigdm, adapt_image_dps_pigdm, alpha_beta
 from delires.methods.pigdm.pigdm_configs import PiGDMConfig, PiGDMDeblurConfig
 from delires.methods.diffpir.guided_diffusion.unet import UNetModel
 from delires.methods.diffpir.guided_diffusion.respace import SpacedDiffusion
@@ -16,69 +18,15 @@ from delires.methods.diffpir.utils.delires_utils import plot_sequence
 from delires.params import RESTORED_DATA_PATH
 
 
-def adapt_kernel_pigdm(kernel: np.ndarray) -> torch.Tensor:
-    """ Convert kernel to float32 tensor with batch and channel dim and values in range [0,1] """
-    kernel_with_batch_dims = np.expand_dims(kernel, axis=(0,1)) # add batch dim and channel dim
-    return torch.tensor(kernel_with_batch_dims, dtype=torch.float32)
-
-
-def adapt_image_pigdm(img: np.ndarray) -> torch.Tensor:
-    """ Convert uint8 image to float32 tensor with batch channel, transpose dims and set values in range [0,1] """
-    img_with_batch_dim = np.expand_dims(np.transpose(img, (2, 0, 1)), axis=0) / 255.
-    return torch.tensor(img_with_batch_dim, dtype=torch.float32)
-
-
-def alpha_beta(scheduler, t):
-    prev_t = scheduler.previous_timestep(t)
-    alpha_prod_t = scheduler.alphas_cumprod[t]
-    alpha_prod_t_prev = scheduler.alphas_cumprod[prev_t] if prev_t >= 0 else scheduler.one
-    current_alpha_t = alpha_prod_t / alpha_prod_t_prev
-    current_beta_t = 1 - current_alpha_t
-    return current_alpha_t, current_beta_t
-
-
-def get_sigmas_and_alphacumprod(config: PiGDMConfig, device: str = "cpu"):
-
-    lambda_ = 7 * config.lambda_ # hardcoded by the authors
-
-    sigma = max(0.001, config.noise_level_img) # noise level associated with condition y
-
-    beta_start              = 0.1 / 1000
-    beta_end                = 20 / 1000
-    betas                   = np.linspace(beta_start, beta_end, config.num_train_timesteps, dtype=np.float32)
-    betas                   = torch.from_numpy(betas).to(device)
-    alphas                  = 1.0 - betas
-    alphas_cumprod          = np.cumprod(alphas.cpu(), axis=0)
-    sqrt_alphas_cumprod     = torch.sqrt(alphas_cumprod)
-    sqrt_1m_alphas_cumprod  = torch.sqrt(1. - alphas_cumprod)
-    reduced_alpha_cumprod   = torch.div(sqrt_1m_alphas_cumprod, sqrt_alphas_cumprod) # equivalent noise sigma on image
-
-    sigmas = []
-    sigma_ks = []
-    rhos = []
-    for i in range(config.num_train_timesteps):
-        sigmas.append(reduced_alpha_cumprod[config.num_train_timesteps-1-i])
-        # if model_out_type == 'pred_xstart' and config.generate_mode == 'DiffPIR':
-        #     sigma_ks.append((sqrt_1m_alphas_cumprod[i]/sqrt_alphas_cumprod[i]))
-        # #elif model_out_type == 'pred_x_prev':
-        # else:
-        sigma_ks.append(torch.sqrt(betas[i]/alphas[i]))
-        rhos.append(lambda_*(sigma**2)/(sigma_ks[i]**2))    
-    rhos, sigmas, sigma_ks = torch.tensor(rhos).to(device), torch.tensor(sigmas).to(device), torch.tensor(sigma_ks).to(device)
-
-    return sigmas, alphas_cumprod
-
-
 def pigdm_sampling(
         config: PiGDMDeblurConfig,
-        model, 
-        diffusion: SpacedDiffusion,
-        scheduler, 
-        y, 
-        guidance, 
-        nsamples=1, 
-        scale=1, 
+        model: UNet2DModel | UNetModel, 
+        scheduler: DDPMScheduler, 
+        y: torch.Tensor, 
+        guidance: Callable, 
+        scale: int = 1, 
         device: str = "cpu",
+        logger: Logger = None,
     ):
     """
     PiGDM with DDPM and intrinsic scale
@@ -86,7 +34,7 @@ def pigdm_sampling(
     sample_size = y.shape[-1]
     step_size = scheduler.config.num_train_timesteps // scheduler.num_inference_steps
 
-    input = torch.randn((nsamples, 3, sample_size, sample_size)).to(device)
+    input = torch.randn((1, 3, sample_size, sample_size)).to(device)
 
     for t in tqdm(scheduler.timesteps):
         # Computation of some hyper-params
@@ -95,27 +43,37 @@ def pigdm_sampling(
         r = torch.sqrt(variance/(variance + 1))
         current_alpha_t = 1 / (1 + variance)
 
-        sigmas, alphas_cumprod = get_sigmas_and_alphacumprod(config, device)
-
         # Predict noise
         input.requires_grad_()
+
         if isinstance(model, UNetModel): # diffpir nn
-            # epsilon_t = model(x_t, t.reshape(1))
+            ### NOTE: the code below mimics the logic of utils_model.model_fn for epsilon prediction using
+            #### a UNetModel instance <model> and a SpacedDiffusion instance <diffusion> with the following settings:
+            # from delires.methods.diffpir.guided_diffusion.respace import ModelMeanType, ModelVarType
+            # assert diffusion.rescale_timesteps == False
+            # assert diffusion.model_mean_type == ModelMeanType.EPSILON
+            # assert diffusion.model_var_type == ModelVarType.LEARNED_RANGE
 
-            curr_sigma = sigmas[config.num_train_timesteps-t-1].cpu().numpy()
-            print(f"curr_sigma = {curr_sigma}")
+            batch_dim, channel_dim = input.shape[:2]
+            vec_t = torch.tensor([t] * batch_dim, device=input.device)
+            
+            # output with 6 channels for each image
+            model_output = model(input, vec_t)
 
-            noisy_residual = utils_model.model_fn(
-                x=input, 
-                noise_level=curr_sigma*255, 
-                model_out_type="epsilon",
-                model_diffusion=model,
-                diffusion=diffusion, 
-                ddim_sample=config.ddim_sample,
-                alphas_cumprod=alphas_cumprod
-            )
-
-        elif isinstance(model, UNet2DModel): # hf nn
+            # according to the config, the first 3 channels are the epsilon_t we want
+            noisy_residual, _ = torch.split(model_output, channel_dim, dim=1)
+            
+            # DEBUG: save intermediate epsilon_t (saved images must look like noise)
+            # img_to_save = torch.clone(epsilon_t)
+            # img_to_save = img_to_save[0].detach().cpu().numpy().copy().transpose(1, 2, 0)
+            # img_to_save -= np.min(img_to_save)
+            # img_to_save /= np.max(img_to_save)
+            # plt.imsave(f"{RESTORED_DATA_PATH}/x_{t.item()}.png", img_to_save)
+            if logger is not None: # debug logs
+                logger.debug(f"t={t.item()}", get_infos_img(noisy_residual))
+        
+        elif isinstance(model, UNet2DModel): # huggingface nn
+            ### NOTE: simply run an inference with the model which is supposed to return the noise epsilon_t
             noisy_residual = model(input, t).sample
 
         else:
@@ -147,7 +105,6 @@ def apply_PiGDM_for_deblurring(
         kernel: np.ndarray,
         model: UNet2DModel,
         scheduler: DDPMScheduler,
-        diffusion: SpacedDiffusion,
         img_ext: str = "png",
         logger: Logger = None,
         device = "cpu"
@@ -163,33 +120,29 @@ def apply_PiGDM_for_deblurring(
         - x taken as input of the function <forward_model> must be a torch.Tensor with float values in [0,1]
     """
 
-    # scheduler = DDPMScheduler.from_pretrained(model_name)
-    # model = UNet2DModel.from_pretrained(model_name).to(device)
-
     # setup model and scheduler
     model = model.to(device)
     scheduler.set_timesteps(config.timesteps)
 
-    if logger is not None:
+    if logger is not None: # debug logs
         logger.debug(get_infos_img(clean_image))
         logger.debug(get_infos_img(degraded_image))
         logger.debug(get_infos_img(kernel))
 
     # setup data and kernel
     sample = {
-        "H": adapt_image_pigdm(clean_image).to(device),
-        "L": adapt_image_pigdm(degraded_image).to(device),
-        "kernel": adapt_kernel_pigdm(kernel).to(device),
+        "H": adapt_image_dps_pigdm(clean_image).to(device),
+        "L": adapt_image_dps_pigdm(degraded_image).to(device),
+        "kernel": adapt_kernel_dps_pigdm(kernel).to(device),
     }
 
-    if logger is not None:
+    if logger is not None: # debug logs
         logger.debug(get_infos_img(sample["H"]))
         logger.debug(get_infos_img(sample["L"]))
         logger.debug(get_infos_img(sample["kernel"]))
 
     # log informations
     if logger is not None:
-        logger.info(f"model_name: {config.model_name}")
         logger.info(f"timesteps: {config.timesteps}")
         logger.info(f"device: {device}")
         logger.info(f"Clean image: {clean_image_filename}")
@@ -202,17 +155,17 @@ def apply_PiGDM_for_deblurring(
     # CPU fallback implementation (no MPS support for torch.roll, fft2, Complex Float, etc.)
     guidance = lambda y, x, sigma, r: utils_agem.deblurring_guidance(y, x, sample['kernel'], sigma=sigma, r=r).to(device)
     y = sample['L'].to(device)
+
     # PiGDM sampling
     res = pigdm_sampling(
         config,
         model,
-        diffusion,
         scheduler, 
         y, 
         guidance, 
-        1, 
         scale=1,
-        device=device
+        device=device,
+        logger=logger,
     )
     # Ground truth image x
     x = sample['H'].to(device)

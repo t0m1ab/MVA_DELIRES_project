@@ -154,6 +154,7 @@ class DPSDiffuser(Diffuser):
             raise ValueError("The blur kernel must be loaded before applying deblurring.")
 
         # apply DiffPIR deblurring
+        self.logger.info(f"model_name: {self.config.model_name}")
         restored_image, metrics = apply_DPS_for_deblurring(
             config=config,
             clean_image_filename=clean_image_filename,
@@ -203,7 +204,7 @@ def main():
     # dps_diffuser.load_blur_kernel("motion_kernel_1")
 
     dps_deblur_config = DPSDeblurConfig()
-    img_name = "theilo"
+    img_name = "69037"
     _ = dps_diffuser.apply_debluring(
         config=dps_deblur_config,
         clean_image_filename=img_name,

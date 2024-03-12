@@ -25,6 +25,7 @@ from delires.params import (
     CLEAN_DATA_PATH,
     DEGRADED_DATA_PATH,    
     RESTORED_DATA_PATH,
+    DIFFPIR_NETWOKRS
 )
 # DDPMPipeline.from_pretrained(model_name)
 
@@ -61,35 +62,33 @@ class PiGDMDiffuser(Diffuser):
     
     def load_model(self, config: PiGDMConfig) -> None:
         """ Load the model and diffusion objects from the given config. """
-        
-        if not config.model_name.startswith("google"):
+
+        if config.model_name in DIFFPIR_NETWOKRS: # load UNetModel nn from diffpir code
             model_path = os.path.join(MODELS_PATH, f"{config.model_name}.pt")
-            if config.model_name == "diffusion_ffhq_10m":
+            if config.model_name == DIFFPIR_NETWOKRS[0]: # diffusion_ffhq_10m
                 model_config = dict(
                     model_path=model_path,
                     num_channels=128,
                     num_res_blocks=1,
                     attention_resolutions="16",
                 )
-            elif config.model_name == "256x256_diffusion_uncond":
+            elif config.model_name == DIFFPIR_NETWOKRS[1]: # 256x256_diffusion_uncond
                 model_config = dict(
                     model_path=model_path,
                     num_channels=256,
                     num_res_blocks=2,
                     attention_resolutions="8,16,32",
                 )
+            else:
+                raise KeyError(f"A new diffpir network was added to DIFFPIR_NETWOKRS but is not handled in the {self}.load_model method: {config.model_name}")
             args = utils_model.create_argparser(model_config).parse_args([])
-            model, diffusion = create_model_and_diffusion(**args_to_dict(args, model_and_diffusion_defaults().keys()))
+            # load model and diffusion objects but don't need diffusion so it is discarded
+            model, _ = create_model_and_diffusion(**args_to_dict(args, model_and_diffusion_defaults().keys()))
             model.load_state_dict(torch.load(args.model_path, map_location="cpu"))
             self.model = model
-            self.diffusion = diffusion
 
-        elif config.model_name == "google/ddpm-ema-celebahq-256":
+        else: # load DDPMPipeline model from HuggingFace
             self.model = DDPMPipeline.from_pretrained(config.model_name).unet
-            self.diffusion = None
-
-        else:
-            raise KeyError(f"Unknown model name: {config.model_name}")
         
         self.scheduler = DDPMScheduler.from_config(config=PiGDMSchedulerConfig().__dict__)
 
@@ -155,6 +154,7 @@ class PiGDMDiffuser(Diffuser):
             raise ValueError("The blur kernel must be loaded before applying deblurring.")
 
         # apply DiffPIR deblurring
+        self.logger.info(f"model_name: {config.model_name}")
         restored_image, metrics = apply_PiGDM_for_deblurring(
             config=config,
             clean_image_filename=clean_image_filename,
@@ -165,7 +165,6 @@ class PiGDMDiffuser(Diffuser):
             kernel=self.kernel,
             model=self.model,
             scheduler=self.scheduler,
-            diffusion=self.diffusion,
             logger=self.logger,
             device=self.device,
         )
