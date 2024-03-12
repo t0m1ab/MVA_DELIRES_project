@@ -2,6 +2,7 @@ import numpy as np
 import torch
 from tqdm import tqdm
 from logging import Logger
+import matplotlib.pyplot as plt
 from diffusers import DDPMPipeline, DDPMScheduler, UNet2DModel
 
 from delires.utils.utils_image import get_infos_img
@@ -37,38 +38,6 @@ def alpha_beta(scheduler, t):
     return current_alpha_t, current_beta_t
 
 
-def get_sigmas_and_alphacumprod(config: DPSConfig):
-
-    lambda_ = 7 * config.lambda_ # hardcoded by the authors
-
-    sigma = max(0.001, config.noise_level_img) # noise level associated with condition y
-
-    beta_start              = 0.1 / 1000
-    beta_end                = 20 / 1000
-    betas                   = np.linspace(beta_start, beta_end, config.num_train_timesteps, dtype=np.float32)
-    betas                   = torch.from_numpy(betas).to(config.device)
-    alphas                  = 1.0 - betas
-    alphas_cumprod          = np.cumprod(alphas.cpu(), axis=0)
-    sqrt_alphas_cumprod     = torch.sqrt(alphas_cumprod)
-    sqrt_1m_alphas_cumprod  = torch.sqrt(1. - alphas_cumprod)
-    reduced_alpha_cumprod   = torch.div(sqrt_1m_alphas_cumprod, sqrt_alphas_cumprod) # equivalent noise sigma on image
-
-    sigmas = []
-    sigma_ks = []
-    rhos = []
-    for i in range(config.num_train_timesteps):
-        sigmas.append(reduced_alpha_cumprod[config.num_train_timesteps-1-i])
-        # if model_out_type == 'pred_xstart' and config.generate_mode == 'DiffPIR':
-        #     sigma_ks.append((sqrt_1m_alphas_cumprod[i]/sqrt_alphas_cumprod[i]))
-        # #elif model_out_type == 'pred_x_prev':
-        # else:
-        sigma_ks.append(torch.sqrt(betas[i]/alphas[i]))
-        rhos.append(lambda_*(sigma**2)/(sigma_ks[i]**2))    
-    rhos, sigmas, sigma_ks = torch.tensor(rhos).to(config.device), torch.tensor(sigmas).to(config.device), torch.tensor(sigma_ks).to(config.device)
-
-    return sigmas, alphas_cumprod
-
-
 def dps_sampling(
         config: DPSDeblurConfig,
         model, 
@@ -90,8 +59,6 @@ def dps_sampling(
     x_T = torch.randn((nsamples, 3, sample_size, sample_size)).to(device)
     x_t = x_T
 
-    sigmas, alphas_cumprod = get_sigmas_and_alphacumprod(config)
-
     # plot_sequence(np.array(sigmas.cpu()), path=RESTORED_DATA_PATH, title="sigmas.png")
     # plot_sequence(scheduler.timesteps, path=RESTORED_DATA_PATH, title="timesteps.png")
 
@@ -101,22 +68,35 @@ def dps_sampling(
         x_t.requires_grad_()
 
         if isinstance(model, UNetModel): # diffpir nn
-            # epsilon_t = model(x_t, t.reshape(1))
+            ### NOTE: the code below mimics the logic of utils_model.model_fn for epsilon prediction using
+            #### a UNetModel instance <model> and a SpacedDiffusion instance <diffusion> with the following settings:
+            # from delires.methods.diffpir.guided_diffusion.respace import ModelMeanType, ModelVarType
+            # assert diffusion.rescale_timesteps == False
+            # assert diffusion.model_mean_type == ModelMeanType.EPSILON
+            # assert diffusion.model_var_type == ModelVarType.LEARNED_RANGE
 
-            curr_sigma = sigmas[config.num_train_timesteps-t-1].cpu().numpy()
-            print(f"curr_sigma = {curr_sigma}")
+            batch_dim, channel_dim = x_t.shape[:2]
+            vec_t = torch.tensor([t] * batch_dim, device=x_t.device)
+            
+            # output with 6 channels for each image
+            model_output = model(x_t, vec_t)
 
-            epsilon_t = utils_model.model_fn(
-                x=x_t, 
-                noise_level=curr_sigma*255, 
-                model_out_type="epsilon",
-                model_diffusion=model,
-                diffusion=diffusion, 
-                ddim_sample=config.ddim_sample,
-                alphas_cumprod=alphas_cumprod
-            )
+            # according to the config, the first 3 channels are the epsilon_t we want
+            epsilon_t, _ = torch.split(model_output, channel_dim, dim=1)
+            
+            # DEBUG: save intermediate epsilon_t (saved images must look like noise)
+            # img_to_save = torch.clone(epsilon_t)
+            # img_to_save = img_to_save[0].detach().cpu().numpy().copy().transpose(1, 2, 0)
+            # img_to_save -= np.min(img_to_save)
+            # img_to_save /= np.max(img_to_save)
+            # plt.imsave(f"{RESTORED_DATA_PATH}/x_{t.item()}.png", img_to_save)
+
+            print(f"t={t.item()}", get_infos_img(epsilon_t))
+
+            # exit()
 
         elif isinstance(model, UNet2DModel): # hf nn
+            ### NOTE: simply run an inference with the model which is supposed to return the noise epsilon_t
             epsilon_t = model(x_t, t).sample
 
         else:
