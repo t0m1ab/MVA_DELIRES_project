@@ -12,7 +12,7 @@ from delires.methods.register import DIFFUSER_TYPE, DIFFUSERS
 from delires.methods.diffpir.diffpir_configs import DiffPIRConfig, DiffPIRDeblurConfig
 from delires.data import all_files_exist
 from delires.fid import fid_score
-from delires.metrics import data_consistency_norm, report_metrics, save_std_image
+from delires.metrics import data_consistency_mse, report_metrics, save_std_image
 
 from delires.params import (
     TASK,
@@ -39,6 +39,11 @@ def run_experiment(
     # create experiment folder
     experiment_path = os.path.join(RESTORED_DATA_PATH, exp_name)
     Path(experiment_path).mkdir(parents=True, exist_ok=True)
+    
+    # Save configs
+    utils.archive_kwargs(diffuser_config.__dict__, os.path.join(RESTORED_DATA_PATH, exp_name, "diffuser_config.json"))
+    utils.archive_kwargs(diffuser_task_config.__dict__, os.path.join(RESTORED_DATA_PATH, exp_name, "diffuser_task_config.json"))
+
       
     # setup device
     device = torch.device("cpu")
@@ -69,20 +74,22 @@ def run_experiment(
 
     # apply the method over the dataset
     logger.info(f"### Starting experiment {exp_name} with {diffuser_type} for {task} task on device {device}.")
-    exp_metrics = {
-        "PSNR": {},  # computed on-the-run
-        "l2_residual": {},  # computed from generated images
+    exp_raw_metrics = {
+        "MSE_to_clean": {},  # computed from generated images
+        "MSE_to_degraded": {},  # computed from generated images
         "average_image_std": {},  # computed from generated images
         "coverage": {},  # TODO
         "LPIPS": {},  # computed on-the-run
         }
-    for img_name in dataset_infos["images"][:2]:
-        img_psnr = []
-        img_l2_residual = []
+    for img_name in dataset_infos["images"]:
+        img_mse_to_clean = []
+        img_mse_to_degraded = []
         img_coverage = []
         img_lpips = []
         
         gen_images = []
+        
+        clean_image = utils_image.imread_uint(os.path.join(CLEAN_DATA_PATH, img_name+".png"))
 
         for gen_idx in range(nb_gen):
 
@@ -107,31 +114,33 @@ def run_experiment(
             )
             
             # compute and store metrics
-            img_psnr.append(metrics["psnr"])
-            img_l2_residual.append(data_consistency_norm(degraded_dataset_name, img_name, restored_image, task, kernel_name))
+            img_mse_to_clean.append(utils_image.mse(restored_image, clean_image))
+            img_mse_to_degraded.append(data_consistency_mse(degraded_dataset_name, img_name, restored_image, task, kernel_name))
             img_coverage.append(0)
-            img_lpips.append(metrics["lpips"])
+            if diffuser_task_config.calc_LPIPS:
+                img_lpips.append(metrics["lpips"])
             
-            gen_images.append(utils_image.single2uint(restored_image))
+            # Append generated image to compute std image
+            gen_images.append(restored_image)
         
         # Save std image of generated restorations
         std_image = np.mean(np.std(gen_images, axis=0), axis=-1)
         save_std_image(exp_name, img_name, std_image)
             
-        exp_metrics["PSNR"][img_name] = list(img_psnr)
-        exp_metrics["l2_residual"][img_name] = img_l2_residual
-        exp_metrics["average_image_std"][img_name] = [np.mean(std_image)]
-        exp_metrics["coverage"][img_name] = img_coverage
-        exp_metrics["LPIPS"][img_name] = list(img_lpips)
+        exp_raw_metrics["MSE_to_clean"][img_name] = img_mse_to_clean
+        exp_raw_metrics["MSE_to_degraded"][img_name] = img_mse_to_degraded
+        exp_raw_metrics["average_image_std"][img_name] = [np.mean(std_image)]
+        exp_raw_metrics["coverage"][img_name] = img_coverage
+        exp_raw_metrics["LPIPS"][img_name] = list(img_lpips)
         
     # Save metrics once before computing FID
-    np.savez(os.path.join(RESTORED_DATA_PATH, exp_name, "metrics.npz"), **exp_metrics)
+    np.savez(os.path.join(RESTORED_DATA_PATH, exp_name, "metrics.npz"), **exp_raw_metrics)
     
     # Compute FID and save metrics
     fid = fid_score.calculate_fid_given_paths(paths=[CLEAN_DATA_PATH, os.path.join(RESTORED_DATA_PATH, exp_name)], batch_size=5, device=device, dims=2048)
-    np.savez(os.path.join(RESTORED_DATA_PATH, exp_name, "metrics.npz"), **exp_metrics, fid=fid)
+    np.savez(os.path.join(RESTORED_DATA_PATH, exp_name, "metrics.npz"), **exp_raw_metrics, fid=fid)
     
-    report_metrics(exp_metrics, fid, os.path.join(RESTORED_DATA_PATH, exp_name, "metrics.csv"))        
+    report_metrics(exp_raw_metrics, fid, os.path.join(RESTORED_DATA_PATH, exp_name, "metrics.csv"))        
     
 
 def main():
@@ -146,10 +155,11 @@ def main():
         degraded_dataset_name=degraded_dataset_name,
         diffuser_config=DiffPIRConfig(),
         diffuser_task_config=DiffPIRDeblurConfig(),
-        nb_gen=2,
+        nb_gen=3,
         kernel_name=None,
     )
 
 
 if __name__ == "__main__":
-    main()    
+    main()
+    

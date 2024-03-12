@@ -461,7 +461,7 @@ def apply_DiffPIR_for_sisr(
         if config.n_channels == 3:
             img_E_y = util.rgb2ycbcr(img_E, only_y=True)
             img_H_y = util.rgb2ycbcr(img_H, only_y=True)
-            psnr_y = util.calculate_psnr(img_E_y, img_H_y, border=border)
+            psnr_y = util.calculate_psnr(img_E_y, img_H_y)
             test_results['psnr_y'].append(psnr_y)
             
         # --------------------------------

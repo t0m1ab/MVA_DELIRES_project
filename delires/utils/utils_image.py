@@ -587,7 +587,7 @@ def channel_convert(in_c, tar_type, img_list):
 # ----------
 # PSNR
 # ----------
-def calculate_psnr(img1, img2, border=0):
+def mse(img1, img2, border=0):
     # img1 and img2 have range [0, 255]
     if not img1.shape == img2.shape:
         raise ValueError('Input images must have the same dimensions.')
@@ -598,9 +598,20 @@ def calculate_psnr(img1, img2, border=0):
     img1 = img1.astype(np.float64)
     img2 = img2.astype(np.float64)
     mse = np.mean((img1 - img2)**2)
+    return mse
+
+
+def calculate_psnr_from_mse(mse):
     if mse == 0:
         return float('inf')
     return 20 * math.log10(255.0 / math.sqrt(mse))
+
+
+def calculate_psnr(img1, img2, border=0):
+    # img1 and img2 have range [0, 255]
+    mse = mse(img1, img2, border)
+    calculate_psnr_from_mse(mse)
+
 
 def calculate_psnr_batch(batch1, batch2, max_pixel=2.0, eps=1e-10):
     if not batch1.shape == batch2.shape:

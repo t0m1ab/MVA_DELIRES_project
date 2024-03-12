@@ -370,7 +370,7 @@ def apply_DiffPIR_for_deblurring(
     img_E = util.tensor2uint(x_0)
     
     # compute PSNR
-    psnr = util.calculate_psnr(img_E, img_H, border=config.border)
+    psnr = util.calculate_psnr(img_E, img_H)
     metrics['psnr'] = psnr
     
     if config.calc_LPIPS:

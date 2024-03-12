@@ -2,7 +2,7 @@ import os
 import numpy as np
 import csv
 from pathlib import Path
-
+import copy
 
 from delires.params import (
     TASK,
@@ -13,7 +13,7 @@ import delires.utils.utils_image as utils_image
 from delires.data import blur, load_blur_kernel
 
 
-def data_consistency_norm(degraded_dataset_name: str, degraded_image_filename: str, reconstructed_image: np.ndarray, task: TASK, kernel_filename: str = None):
+def data_consistency_mse(degraded_dataset_name: str, degraded_image_filename: str, reconstructed_image: np.ndarray, task: TASK, kernel_filename: str = None):
     """
     Compute the data consistency norm between the clean and the reconstructed image.
     
@@ -35,22 +35,69 @@ def data_consistency_norm(degraded_dataset_name: str, degraded_image_filename: s
         if kernel_filename is None:
             raise ValueError("The kernel filename must be loaded to compute data consistency for deblur task.")
         kernel = load_blur_kernel(kernel_filename)
-        return np.linalg.norm(degraded_image - blur(reconstructed_image, kernel))
+        return utils_image.mse(degraded_image, blur(reconstructed_image, kernel))
     else:
         raise NotImplementedError(f"Data consistency norm not implemented for task {task}.")
     
+
+def process_raw_metrics(raw_metrics: dict):
+    """
+    Process the raw metrics to compute the final metrics.
     
-def report_metrics(metrics: dict, fid: float, exp_path: str):
-    img_names = list(metrics["PSNR"].keys())
+    ARGUMENTS:
+        - raw_metrics (dict): the raw metrics.
+        
+    RETURNS:
+        - metrics (dict): the final metrics.
+    """
+    metrics = {
+        "PSNR": {},
+        "datafit_RMSE": {},
+        "average_image_std": {},
+        "coverage": {},
+        "LPIPS": {},
+    }
+    
+    # PSNR
+    metrics["PSNR"]["overall"] = utils_image.calculate_psnr_from_mse(np.mean(list(raw_metrics["MSE_to_clean"].values())))
+    for img_name, mse in raw_metrics["MSE_to_clean"].items():
+        metrics["PSNR"][img_name] = utils_image.calculate_psnr_from_mse(np.mean(mse))
+        
+    # RMSE
+    metrics["datafit_RMSE"]["overall"] = np.sqrt(np.mean(list(raw_metrics["MSE_to_degraded"].values())))
+    for img_name, mse in raw_metrics["MSE_to_degraded"].items():
+        metrics["datafit_RMSE"][img_name] = np.sqrt(np.mean(mse))
+        
+    # average image std
+    metrics["average_image_std"]["overall"] = np.mean(list(raw_metrics["average_image_std"].values()))
+    for img_name, average_std in raw_metrics["average_image_std"].items():
+        metrics["average_image_std"][img_name] = np.mean(average_std)
+    
+    # coverage
+    metrics["coverage"]["overall"] = np.mean(list(raw_metrics["coverage"].values()))
+    for img_name, coverage in raw_metrics["coverage"].items():
+        metrics["coverage"][img_name] = np.mean(coverage)
+    
+    # LPIPS
+    metrics["LPIPS"]["overall"] = np.mean(list(raw_metrics["LPIPS"].values()))
+    for img_name, lpips in raw_metrics["LPIPS"].items():
+        metrics["LPIPS"][img_name] = np.mean(lpips)
+    
+    return metrics
+
+
+def report_metrics(raw_metrics: dict, fid: float, exp_path: str):
+    metrics = process_raw_metrics(raw_metrics)
+    img_names = list(metrics["PSNR"].keys())[1:]
     with open(exp_path, mode='w') as file:
         writer = csv.writer(file, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
-        fields = ["img", "PSNR", "l2_residual", "average_image_std", "coverage", "LPIPS"]
+        fields = ["img", "PSNR", "datafit_RMSE", "average_image_std", "coverage", "LPIPS", "FID"]
         writer.writerow(fields + ["FID"])
-        writer.writerow(["Overall"] + [np.mean(list(metrics[field].values())) for field in fields[1:]] + [fid])
+        writer.writerow(["Overall"] + [metrics[field]["overall"] for field in fields[1:-2]] + [fid])
         for img in img_names:
             writer.writerow(
                 [img]
-                + [np.mean(metrics[field][img]) for field in fields[1:]]
+                + [np.mean(metrics[field][img]) for field in fields[1:-2]]
                 )
             
             
