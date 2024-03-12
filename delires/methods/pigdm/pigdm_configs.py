@@ -18,17 +18,17 @@ class PiGDMDeblurConfig(PiGDMConfig):
     lambda_             = 1.0                               # key parameter lambda
 
 
-SCHEDULER_CONFIG = {
-    "_class_name": "DDPMScheduler",
-    "_diffusers_version": "0.1.1",
-    "beta_end": 0.02,
-    "beta_schedule": "linear",
-    "beta_start": 0.0001,
-    "clip_sample": True,
-    "num_train_timesteps": 1000,
-    "trained_betas": None,
-    "variance_type": "fixed_small"
-}
+@dataclass
+class PiGDMSchedulerConfig():
+    _class_name: str = "DDPMScheduler"
+    _diffusers_version: str = "0.1.1"
+    beta_end: float = 0.02
+    beta_schedule: str = "linear"
+    beta_start: float = 0.0001
+    clip_sample: bool = True
+    num_train_timesteps: int = 1000
+    trained_betas: list | None = None
+    variance_type: str = "fixed_small"
 
 
 def main():

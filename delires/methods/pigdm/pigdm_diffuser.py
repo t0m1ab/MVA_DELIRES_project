@@ -9,7 +9,7 @@ from delires.data import load_downsample_kernel, load_blur_kernel
 from delires.utils.utils_logger import logger_info
 from delires.utils import utils_image
 from delires.methods.diffuser import Diffuser
-from delires.methods.pigdm.pigdm_configs import PiGDMConfig, PiGDMDeblurConfig, SCHEDULER_CONFIG
+from delires.methods.pigdm.pigdm_configs import PiGDMConfig, PiGDMDeblurConfig, PiGDMSchedulerConfig
 from delires.methods.diffpir.utils import utils_model
 from delires.methods.pigdm.pigdm_deblur import apply_PiGDM_for_deblurring
 
@@ -91,7 +91,7 @@ class PiGDMDiffuser(Diffuser):
         else:
             raise KeyError(f"Unknown model name: {config.model_name}")
         
-        self.scheduler = DDPMScheduler.from_config(config=SCHEDULER_CONFIG)
+        self.scheduler = DDPMScheduler.from_config(config=PiGDMSchedulerConfig().__dict__)
 
     def save_restored_image(
             self, 

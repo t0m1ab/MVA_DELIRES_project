@@ -10,7 +10,7 @@ class DPSConfig:
 class DPSDeblurConfig(DPSConfig):
     model_name: str     = "diffusion_ffhq_10m"    # diffusion_ffhq_10m | 256x256_diffusion_uncond | google/ddpm-ema-celebahq-256
 
-    timesteps: int      = 50                                # number of timesteps for scheduler
+    timesteps: int      = 1000                              # number of timesteps for scheduler
     noise_level_img     = 12.75/255.0                       # set AWGN noise level for LR image, default: 0
     num_train_timesteps = 1000
     iter_num            = 10                                # set number of iterations
@@ -19,17 +19,17 @@ class DPSDeblurConfig(DPSConfig):
     lambda_             = 1.0                               # key parameter lambda
 
 
-SCHEDULER_CONFIG = {
-    "_class_name": "DDPMScheduler",
-    "_diffusers_version": "0.1.1",
-    "beta_end": 0.02,
-    "beta_schedule": "linear",
-    "beta_start": 0.0001,
-    "clip_sample": True,
-    "num_train_timesteps": 1000,
-    "trained_betas": None,
-    "variance_type": "fixed_small"
-}
+@dataclass
+class DPSSchedulerConfig():
+    _class_name: str = "DDPMScheduler"
+    _diffusers_version: str = "0.1.1"
+    beta_end: float = 0.02
+    beta_schedule: str = "linear"
+    beta_start: float = 0.0001
+    clip_sample: bool = True
+    num_train_timesteps: int = 1000
+    trained_betas: list | None = None
+    variance_type: str = "fixed_small"
 
 
 def main():
