@@ -10,6 +10,8 @@ delires/data/degraded_datasets
 delires/results/
 delires/models/
 
+delires/data/ffhq/
+
 **/notes.txt
 **/sandbox.py
 **.ipynb
