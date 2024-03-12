@@ -11,6 +11,8 @@ delires/data/clean_images_others
 delires/results/
 delires/models/
 
+delires/data/ffhq/
+
 **/notes.txt
 **/sandbox.py
 **.ipynb
