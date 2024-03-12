@@ -7,35 +7,14 @@ import matplotlib.pyplot as plt
 from diffusers import DDPMScheduler, UNet2DModel
 
 from delires.utils.utils_image import get_infos_img
-import delires.methods.dps_pigdm_utils.utils_agem as utils_agem
-import delires.methods.dps_pigdm_utils.utils_image as utils_image
+import delires.methods.utils.utils_agem as utils_agem
+import delires.methods.utils.utils_image as utils_image
+from delires.methods.utils.utils import adapt_kernel_dps_pigdm, adapt_image_dps_pigdm, alpha_beta
 from delires.methods.dps.dps_configs import DPSConfig, DPSDeblurConfig
 from delires.methods.diffpir.guided_diffusion.unet import UNetModel
 from delires.methods.diffpir.utils.delires_utils import plot_sequence
 
 from delires.params import RESTORED_DATA_PATH
-
-
-def adapt_kernel_dps(kernel: np.ndarray) -> torch.Tensor:
-    """ Convert kernel to float32 tensor with batch and channel dim and values in range [0,1] """
-    kernel_with_batch_dims = np.expand_dims(kernel, axis=(0,1)) # add batch dim and channel dim
-    return torch.tensor(kernel_with_batch_dims, dtype=torch.float32)
-
-
-def adapt_image_dps(img: np.ndarray) -> torch.Tensor:
-    """ Convert uint8 image to float32 tensor with batch channel, transpose dims and set values in range [0,1] """
-    img_with_batch_dim = np.expand_dims(np.transpose(img, (2, 0, 1)), axis=0) / 255.
-    return torch.tensor(img_with_batch_dim, dtype=torch.float32)
-
-
-def alpha_beta(scheduler, t):
-    """ Compute alpha_t and beta_t for a given timestep t. """
-    prev_t = scheduler.previous_timestep(t)
-    alpha_prod_t = scheduler.alphas_cumprod[t]
-    alpha_prod_t_prev = scheduler.alphas_cumprod[prev_t] if prev_t >= 0 else scheduler.one
-    current_alpha_t = alpha_prod_t / alpha_prod_t_prev
-    current_beta_t = 1 - current_alpha_t
-    return current_alpha_t, current_beta_t
 
 
 def dps_sampling(
@@ -162,9 +141,9 @@ def apply_DPS_for_deblurring(
 
     # setup data and kernel
     sample = {
-        "H": adapt_image_dps(clean_image).to(device),
-        "L": adapt_image_dps(degraded_image).to(device),
-        "kernel": adapt_kernel_dps(kernel).to(device),
+        "H": adapt_image_dps_pigdm(clean_image).to(device),
+        "L": adapt_image_dps_pigdm(degraded_image).to(device),
+        "kernel": adapt_kernel_dps_pigdm(kernel).to(device),
     }
 
     if logger is not None: # debug logs
@@ -174,7 +153,6 @@ def apply_DPS_for_deblurring(
 
     # log informations
     if logger is not None:
-        logger.info(f"model_name: {config.model_name}")
         logger.info(f"timesteps: {config.timesteps}")
         logger.info(f"device: {device}")
         logger.info(f"Clean image: {clean_image_filename}")
