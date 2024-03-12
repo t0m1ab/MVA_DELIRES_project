@@ -1,16 +1,16 @@
+from typing import Callable
 import numpy as np
 import torch
 from tqdm import tqdm
 from logging import Logger
-from diffusers import DDPMPipeline, DDPMScheduler, UNet2DModel
+import matplotlib.pyplot as plt
+from diffusers import DDPMScheduler, UNet2DModel
 
 from delires.utils.utils_image import get_infos_img
 import delires.methods.dps_pigdm_utils.utils_agem as utils_agem
 import delires.methods.dps_pigdm_utils.utils_image as utils_image
 from delires.methods.dps.dps_configs import DPSConfig, DPSDeblurConfig
 from delires.methods.diffpir.guided_diffusion.unet import UNetModel
-from delires.methods.diffpir.guided_diffusion.respace import SpacedDiffusion
-from delires.methods.diffpir.utils import utils_model
 from delires.methods.diffpir.utils.delires_utils import plot_sequence
 
 from delires.params import RESTORED_DATA_PATH
@@ -29,6 +29,7 @@ def adapt_image_dps(img: np.ndarray) -> torch.Tensor:
 
 
 def alpha_beta(scheduler, t):
+    """ Compute alpha_t and beta_t for a given timestep t. """
     prev_t = scheduler.previous_timestep(t)
     alpha_prod_t = scheduler.alphas_cumprod[t]
     alpha_prod_t_prev = scheduler.alphas_cumprod[prev_t] if prev_t >= 0 else scheduler.one
@@ -37,49 +38,15 @@ def alpha_beta(scheduler, t):
     return current_alpha_t, current_beta_t
 
 
-def get_sigmas_and_alphacumprod(config: DPSConfig, device: str = "cpu"):
-
-    lambda_ = 7 * config.lambda_ # hardcoded by the authors
-
-    sigma = max(0.001, config.noise_level_img) # noise level associated with condition y
-
-    beta_start              = 0.1 / 1000
-    beta_end                = 20 / 1000
-    betas                   = np.linspace(beta_start, beta_end, config.num_train_timesteps, dtype=np.float32)
-    betas                   = torch.from_numpy(betas).to(device)
-    alphas                  = 1.0 - betas
-    alphas_cumprod          = np.cumprod(alphas.cpu(), axis=0)
-    sqrt_alphas_cumprod     = torch.sqrt(alphas_cumprod)
-    sqrt_1m_alphas_cumprod  = torch.sqrt(1. - alphas_cumprod)
-    reduced_alpha_cumprod   = torch.div(sqrt_1m_alphas_cumprod, sqrt_alphas_cumprod) # equivalent noise sigma on image
-
-    sigmas = []
-    sigma_ks = []
-    rhos = []
-    for i in range(config.num_train_timesteps):
-        sigmas.append(reduced_alpha_cumprod[config.num_train_timesteps-1-i])
-        # if model_out_type == 'pred_xstart' and config.generate_mode == 'DiffPIR':
-        #     sigma_ks.append((sqrt_1m_alphas_cumprod[i]/sqrt_alphas_cumprod[i]))
-        # #elif model_out_type == 'pred_x_prev':
-        # else:
-        sigma_ks.append(torch.sqrt(betas[i]/alphas[i]))
-        rhos.append(lambda_*(sigma**2)/(sigma_ks[i]**2))    
-    rhos, sigmas, sigma_ks = torch.tensor(rhos).to(device), torch.tensor(sigmas).to(device), torch.tensor(sigma_ks).to(device)
-
-    return sigmas, alphas_cumprod
-
-
 def dps_sampling(
-        config: DPSDeblurConfig,
-        model, 
-        scheduler, 
-        y, 
-        forward_model, 
-        nsamples=1, 
-        scale=1, 
-        scale_guidance=1,
+        model: UNet2DModel | UNetModel, 
+        scheduler: DDPMScheduler, 
+        y: torch.Tensor, 
+        forward_model: Callable, 
+        scale: int = 1, 
+        scale_guidance: int = 1,
         device: str = "cpu",
-        diffusion: SpacedDiffusion = None,
+        logger: Logger = None,
     ):
     """
     DPS with DDPM and intrinsic scale
@@ -87,10 +54,8 @@ def dps_sampling(
     sample_size = y.shape[-1]
 
     # Init random noise
-    x_T = torch.randn((nsamples, 3, sample_size, sample_size)).to(device)
+    x_T = torch.randn((1, 3, sample_size, sample_size)).to(device)
     x_t = x_T
-
-    sigmas, alphas_cumprod = get_sigmas_and_alphacumprod(config, device)
 
     # plot_sequence(np.array(sigmas.cpu()), path=RESTORED_DATA_PATH, title="sigmas.png")
     # plot_sequence(scheduler.timesteps, path=RESTORED_DATA_PATH, title="timesteps.png")
@@ -101,29 +66,38 @@ def dps_sampling(
         x_t.requires_grad_()
 
         if isinstance(model, UNetModel): # diffpir nn
-            # epsilon_t = model(x_t, t.reshape(1))
+            ### NOTE: the code below mimics the logic of utils_model.model_fn for epsilon prediction using
+            #### a UNetModel instance <model> and a SpacedDiffusion instance <diffusion> with the following settings:
+            # from delires.methods.diffpir.guided_diffusion.respace import ModelMeanType, ModelVarType
+            # assert diffusion.rescale_timesteps == False
+            # assert diffusion.model_mean_type == ModelMeanType.EPSILON
+            # assert diffusion.model_var_type == ModelVarType.LEARNED_RANGE
 
-            curr_sigma = sigmas[config.num_train_timesteps-t-1].cpu().numpy()
-            print(f"curr_sigma = {curr_sigma}")
+            batch_dim, channel_dim = x_t.shape[:2]
+            vec_t = torch.tensor([t] * batch_dim, device=x_t.device)
+            
+            # output with 6 channels for each image
+            model_output = model(x_t, vec_t)
 
-            epsilon_t = utils_model.model_fn(
-                x=x_t, 
-                noise_level=curr_sigma*255, 
-                model_out_type="epsilon",
-                model_diffusion=model,
-                diffusion=diffusion, 
-                ddim_sample=config.ddim_sample,
-                alphas_cumprod=alphas_cumprod
-            )
-
-        elif isinstance(model, UNet2DModel): # hf nn
+            # according to the config, the first 3 channels are the epsilon_t we want
+            epsilon_t, _ = torch.split(model_output, channel_dim, dim=1)
+            
+            # DEBUG: save intermediate epsilon_t (saved images must look like noise)
+            # img_to_save = torch.clone(epsilon_t)
+            # img_to_save = img_to_save[0].detach().cpu().numpy().copy().transpose(1, 2, 0)
+            # img_to_save -= np.min(img_to_save)
+            # img_to_save /= np.max(img_to_save)
+            # plt.imsave(f"{RESTORED_DATA_PATH}/x_{t.item()}.png", img_to_save)
+            if logger is not None: # debug logs
+                logger.debug(f"t={t.item()}", get_infos_img(epsilon_t))
+        
+        elif isinstance(model, UNet2DModel): # huggingface nn
+            ### NOTE: simply run an inference with the model which is supposed to return the noise epsilon_t
             epsilon_t = model(x_t, t).sample
 
         else:
             raise ValueError(f"Unknown model instance: {type(model)}")
         
-        # print(get_infos_img(epsilon_t))
-
         # Get x0_hat and unconditional
         # x_{t-1} = a_t * x_t + b_t * epsilon(x_t) + sigma_t z_t
         # with b_t = eta_t
@@ -162,7 +136,6 @@ def apply_DPS_for_deblurring(
         kernel: np.ndarray,
         model: UNet2DModel,
         scheduler: DDPMScheduler,
-        diffusion: SpacedDiffusion,
         img_ext: str = "png",
         logger: Logger = None,
         device = "cpu",
@@ -178,14 +151,11 @@ def apply_DPS_for_deblurring(
         - x taken as input of the function <forward_model> must be a torch.Tensor with float values in [0,1]
     """
 
-    # scheduler = DDPMScheduler.from_pretrained(model_name)
-    # model = UNet2DModel.from_pretrained(model_name).to(device)
-
     # setup model and scheduler
     model = model.to(device)
     scheduler.set_timesteps(config.timesteps)
 
-    if logger is not None:
+    if logger is not None: # debug logs
         logger.debug(get_infos_img(clean_image))
         logger.debug(get_infos_img(degraded_image))
         logger.debug(get_infos_img(kernel))
@@ -197,7 +167,7 @@ def apply_DPS_for_deblurring(
         "kernel": adapt_kernel_dps(kernel).to(device),
     }
 
-    if logger is not None:
+    if logger is not None: # debug logs
         logger.debug(get_infos_img(sample["H"]))
         logger.debug(get_infos_img(sample["L"]))
         logger.debug(get_infos_img(sample["kernel"]))
@@ -217,21 +187,22 @@ def apply_DPS_for_deblurring(
     # CPU fallback implementation (no MPS support for torch.roll, fft2, Complex Float, etc.)
     forward_model = lambda x: utils_agem.fft_blur(x, sample['kernel'])
     # forward_model = lambda x: forward_model_cpu(x.to('cpu')).to(device)
+    
     # Degraded image y = A x + noise
     y = sample['L'].to(device)
+
     # DPS sampling
     res = dps_sampling(
-        config,
         model, 
         scheduler, 
         y, 
         forward_model, 
-        1, 
         scale=1, 
         scale_guidance=0, 
         device=device,
-        diffusion=diffusion,
+        logger=logger,
     )
+
     # Ground truth image x
     x = sample['H'].to(device)
 
