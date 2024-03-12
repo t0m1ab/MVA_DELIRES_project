@@ -210,7 +210,7 @@ def main():
         degraded_image_filename=img_name,
         degraded_dataset_name="blurred_dataset",
         kernel_filename="gaussian_kernel_05",
-        save=True, # we save the image on the fly for the demo
+        save=True,
     )
 
 

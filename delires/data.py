@@ -291,7 +291,7 @@ def main():
     noise_level_img = 12.75/255.0 # 0.05
     # blur_kernel = create_blur_kernel("Gaussian", 61, seed, kernel_name, "cpu")
     blur_kernel = load_blur_kernel(kernel_name)
-    generate_degraded_dataset_blurred("blurred_dataset2", blur_kernel, kernel_name, 3, noise_level_img, seed, False)
+    generate_degraded_dataset_blurred("blurred_dataset", blur_kernel, kernel_name, 3, noise_level_img, seed, False)
     return
     # Generate downsampled dataset
     seed = 0

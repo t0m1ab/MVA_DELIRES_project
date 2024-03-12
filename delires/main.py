@@ -31,9 +31,15 @@ def run_experiment(
     diffuser_task_config: DiffPIRDeblurConfig,
     nb_gen: int = 1,
     kernel_name: str|None = None,
+    fid_dims: int = 2048,
+    fid_kept_eigenvectors: int|None = None,
     ):
     """ 
     Run an experiment for a given method.
+    
+    Arguments:
+        - fid_dims: number of features of the layer of InceptionV3 chosen for the computation of FID. This impacts the interpretability of the measure as well as its scale.
+        - fid_kept_eigenvectors: Number of eigenvectors to keep for the covariance matrix of the features of InceptionV3 retained for the computation of FID. Use this if the number of images in the dataset is not sufficient.
     """
 
     # create experiment folder
@@ -137,7 +143,7 @@ def run_experiment(
     np.savez(os.path.join(RESTORED_DATA_PATH, exp_name, "metrics.npz"), **exp_raw_metrics)
     
     # Compute FID and save metrics
-    fid = fid_score.calculate_fid_given_paths(paths=[CLEAN_DATA_PATH, os.path.join(RESTORED_DATA_PATH, exp_name)], batch_size=5, device=device, dims=2048)
+    fid = fid_score.calculate_fid_given_paths(paths=[CLEAN_DATA_PATH, os.path.join(RESTORED_DATA_PATH, exp_name)], batch_size=5, device=device, dims=fid_dims, keep_eigen=fid_kept_eigenvectors)
     np.savez(os.path.join(RESTORED_DATA_PATH, exp_name, "metrics.npz"), **exp_raw_metrics, fid=fid)
     
     report_metrics(exp_raw_metrics, fid, os.path.join(RESTORED_DATA_PATH, exp_name, "metrics.csv"))        
@@ -145,8 +151,8 @@ def run_experiment(
 
 def main():
     
-    exp_name = "test_exp_diffpir_deblur"
-    degraded_dataset_name = "blurred_dataset"
+    exp_name = "test_theilo"
+    degraded_dataset_name = "test_theilo"
     
     run_experiment(
         exp_name=exp_name,
@@ -155,8 +161,10 @@ def main():
         degraded_dataset_name=degraded_dataset_name,
         diffuser_config=DiffPIRConfig(),
         diffuser_task_config=DiffPIRDeblurConfig(),
-        nb_gen=3,
+        nb_gen=2,
         kernel_name=None,
+        fid_dims=192,
+        fid_kept_eigenvectors=157,
     )
 
 

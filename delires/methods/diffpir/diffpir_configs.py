@@ -13,7 +13,7 @@ class DiffPIRDeblurConfig(DiffPIRConfig):
     model_name: str = 'diffusion_ffhq_10m'  # diffusion_ffhq_10m, 256x256_diffusion_uncond; set diffusion model
     testset_name: str = 'demo_test'                  # set testing set,  'imagenet_val' | 'ffhq_val'
     num_train_timesteps: int = 1000
-    iter_num: int = 50           # set number of iterations
+    iter_num: int = 10           # set number of iterations
     iter_num_U: int = 1             # set number of inner iterations, default: 1
 
     show_img: bool = False         # default: False

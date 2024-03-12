@@ -248,7 +248,7 @@ def compute_statistics_of_path(path, model, batch_size, dims, device,
     return m, s
 
 
-def calculate_fid_given_paths(paths, batch_size, device, dims, num_workers=1):
+def calculate_fid_given_paths(paths, batch_size, device, dims, num_workers=1, keep_eigen=None):
     """Calculates the FID of two paths"""
     for p in paths:
         if not os.path.exists(p):
@@ -257,11 +257,21 @@ def calculate_fid_given_paths(paths, batch_size, device, dims, num_workers=1):
     block_idx = InceptionV3.BLOCK_INDEX_BY_DIM[dims]
 
     model = InceptionV3([block_idx]).to(device)
-
+    
     m1, s1 = compute_statistics_of_path(paths[0], model, batch_size,
                                         dims, device, num_workers)
+
     m2, s2 = compute_statistics_of_path(paths[1], model, batch_size,
                                         dims, device, num_workers)
+    
+    if keep_eigen is not None:
+        # Retain only the keep_dim eigenvectors to compensate for too small a dataset
+        U1, S1, Vt1 = np.linalg.svd(s1)
+        s1 = U1[:, :keep_eigen] @ np.diag(S1[:keep_eigen]) @ Vt1[:keep_eigen, :]
+        
+        U2, S2, Vt2 = np.linalg.svd(s2)
+        s2 = U2[:, :keep_eigen] @ np.diag(S2[:keep_eigen]) @ Vt2[:keep_eigen, :]
+    
     fid_value = calculate_frechet_distance(m1, s1, m2, s2)
 
     return fid_value

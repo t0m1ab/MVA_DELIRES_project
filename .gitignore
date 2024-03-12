@@ -7,6 +7,7 @@ delires/methods/diffpir/model_zoo/
 delires/methods/diffpir/results/
 
 delires/data/degraded_datasets
+delires/data/clean_images_others
 delires/results/
 delires/models/
 
