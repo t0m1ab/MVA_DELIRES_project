@@ -2,6 +2,7 @@ import os
 import numpy as np
 from pathlib import Path
 from logging import Logger, getLogger
+from typing import Union
 
 
 from delires.data import load_downsample_kernel, load_blur_kernel
@@ -10,6 +11,7 @@ from delires.utils.utils_logger import logger_info
 from delires.params import (
     RESTORED_DATA_PATH,
 )
+
 
 
 class Diffuser():

@@ -21,7 +21,7 @@ from delires.methods.diffpir.guided_diffusion.script_util import (
 
 from delires.params import (
     MODELS_PATH,
-    KERNELS_PATH,
+    OPERATORS_PATH,
     CLEAN_DATA_PATH,
     DEGRADED_DATA_PATH,    
     RESTORED_DATA_PATH,

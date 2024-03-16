@@ -1,26 +1,18 @@
 import os.path
-from pathlib import Path
 from logging import Logger
 import cv2
-import logging
 from tqdm import tqdm
 from dataclasses import dataclass
 
 import numpy as np
 import torch
-import torch.nn.functional as F
 from datetime import datetime
-from collections import OrderedDict
 
-from delires.methods.diffpir.diffpir_configs import DiffPIRDeblurConfig
+from delires.methods.diffpir.diffpir_configs import DiffPIRInpaintingConfig
 from delires.methods.diffpir.utils import utils_model
-from delires.methods.diffpir.utils import utils_logger
 from delires.methods.diffpir.utils import utils_sisr as sr
 from delires.methods.diffpir.utils import utils_image as util
 from delires.methods.diffpir.utils.delires_utils import (
-    plot_sequence, 
-    create_blur_kernel, 
-    create_blurred_and_noised_image, 
     manually_build_image_path,
 )
 from delires.methods.diffpir.guided_diffusion.unet import UNetModel
@@ -34,6 +26,8 @@ from delires.methods.diffpir.guided_diffusion.script_util import (
     args_to_dict,
 )
 
+from delires.data import load_masks, create_masked_image
+
 from delires.params import (
     MODELS_PATH,
     OPERATORS_PATH,
@@ -43,7 +37,7 @@ from delires.params import (
 )
 
 
-def build_result_name(img_name: str, config: DiffPIRDeblurConfig) -> str:
+def build_result_name(img_name: str, config: DiffPIRInpaintingConfig) -> str:
     result_name = f"{img_name}"
     result_name += f"_{config.task_current}"
     result_name += f"_{config.generate_mode}"
@@ -53,18 +47,18 @@ def build_result_name(img_name: str, config: DiffPIRDeblurConfig) -> str:
     result_name += f"_eta{config.eta}"
     result_name += f"_zeta{config.zeta}"
     result_name += f"_lambda{config.lambda_}"
-    result_name += f"_blurmode{config.blur_mode}"
     return result_name
 
 
-def apply_DiffPIR_for_deblurring(
-        config: DiffPIRDeblurConfig,
+def apply_DiffPIR_for_inpainting(
+        config: DiffPIRInpaintingConfig,
         clean_image_filename: str,
         degraded_image_filename: str,
-        kernel_filename: str,
+        masks_filename: str,
+        mask_index: int,
         clean_image: np.ndarray,
         degraded_image: np.ndarray,
-        kernel: np.ndarray,
+        mask: np.ndarray,
         model: UNetModel,
         diffusion: SpacedDiffusion,
         img_ext: str = "png",
@@ -78,10 +72,11 @@ def apply_DiffPIR_for_deblurring(
         - config: a DiffPIRDeblurConfig object
         - clean_image_filename: the name of the clean image (without extension, ex: "my_clean_image")
         - degraded_image_filename: the name of the degraded image (without extension, ex: "my_degraded_image")
-        - kernel_filename: the name of the kernel (without extension, ex: "my_kernel")
+        - masks_filename: the name of the set of masks (without extension, ex: "my_masks")
+        - mask_index: the index of the mask within the set of masks
         - clean_image: the clean image as a numpy array
         - degraded_image: the degraded image as a numpy array
-        - kernel: the blur kernel (see delires.utils.delires_utils.create_blur_kernel() for more details)
+        - mask: the mask as a numpy array
         - model: the UNetModel object
         - diffusion: the SpacedDiffusion object
         - img_ext: the extension of the image (ex: "png")
@@ -100,8 +95,6 @@ def apply_DiffPIR_for_deblurring(
     if config.calc_LPIPS:
         import lpips
         loss_fn_vgg = lpips.LPIPS(net='vgg').to(device)
-    # load the kernel tensor 4D
-    k_4d = torch.einsum('ab,cd->abcd', torch.eye(3).to(device), torch.from_numpy(kernel).to(device))
 
     # setup logger
     # result_name = build_result_name(degraded_image_filename, config)
@@ -161,10 +154,9 @@ def apply_DiffPIR_for_deblurring(
         logger.info(f"model_name: {config.model_name} | image sigma: {config.noise_level_img} | model sigma: {noise_level_model}")
         logger.info(f"eta: {config.eta} | zeta: {config.zeta} | lambda: {config.lambda_} | guidance_scale: {config.guidance_scale}")
         logger.info(f"start step: {t_start} | skip_type: {config.skip_type} | skip interval: {skip} | skipstep analytic steps: {noise_model_t}")
-        logger.info(f"use_DIY_kernel: {config.use_DIY_kernel} | blur mode: {config.blur_mode}")
         logger.info(f"Clean image: {clean_image_filename}")
         logger.info(f"Degraded image: {degraded_image_filename}")
-        logger.info(f"Kernel: {kernel_filename}")
+        logger.info(f"Masks: {masks_filename}")
     
 
     ### 5 - SETUP ADAPTED VAR NAMES FOR THE RESTORATION LOGIC
@@ -175,8 +167,8 @@ def apply_DiffPIR_for_deblurring(
     img_H = clean_image
     img_L = degraded_image
     img_name = degraded_image_filename    
-    lambda_ = 7 * config.lambda_ # hardcoded by the authors
-    zeta = 3 * config.zeta # hardcoded by the authors
+    lambda_ = config.lambda_ 
+    zeta = config.zeta
     
 
     ### 6 - APPLY RESTORATION LOGIC
@@ -212,19 +204,17 @@ def apply_DiffPIR_for_deblurring(
     # (3) initialize x, and pre-calculation
     # --------------------------------
 
-    # x = util.single2tensor4(img_L).to(device)
+    # convert mask to tensor
+    mask = util.single2tensor4(mask.astype(np.float32)).to(device) 
+    
     y = util.single2tensor4(img_L).to(device) # (1,3,256,256)
+    y = y * 2 -1        # [-1,1]
 
     # for y with given noise level, add noise from t_y
     t_y = utils_model.find_nearest(reduced_alpha_cumprod, 2 * config.noise_level_img)
     sqrt_alpha_effective = sqrt_alphas_cumprod[t_start] / sqrt_alphas_cumprod[t_y]
     x = sqrt_alpha_effective * (2*y-1) + torch.sqrt(sqrt_1m_alphas_cumprod[t_start]**2 - \
             sqrt_alpha_effective**2 * sqrt_1m_alphas_cumprod[t_y]**2) * torch.randn_like(y)
-    # x = torch.randn_like(y)
-
-    k_tensor = util.single2tensor4(np.expand_dims(kernel, 2)).to(device)
-
-    FB, FBC, F2B, FBFy = sr.pre_calculate(y, k_tensor, config.sf)
 
     # --------------------------------
     # (4) main iterations
@@ -259,79 +249,51 @@ def apply_DiffPIR_for_deblurring(
             # --------------------------------
             # step 1, reverse diffsuion step
             # --------------------------------
+            
+            # add noise, make the image noise level consistent in pixel level
+            if config.generate_mode == 'repaint':
+                x = (sqrt_alphas_cumprod[t_i] * y + sqrt_1m_alphas_cumprod[t_i] * torch.randn_like(x)) * mask \
+                        + (1-mask) * x
 
             # solve equation 6b with one reverse diffusion step
-            if 'DPS' in config.generate_mode:
-                x = x.requires_grad_()
-                xt, x0 = utils_model.model_fn(x, noise_level=curr_sigma*255, model_out_type='pred_x_prev_and_start', \
-                            model_diffusion=model, diffusion=diffusion, ddim_sample=config.ddim_sample, alphas_cumprod=alphas_cumprod)
-            else:
+            if model_out_type == 'pred_xstart':
                 x0 = utils_model.model_fn(x, noise_level=curr_sigma*255, model_out_type=model_out_type, \
                         model_diffusion=model, diffusion=diffusion, ddim_sample=config.ddim_sample, alphas_cumprod=alphas_cumprod)
-            # x0 = utils_model.test_mode(utils_model.model_fn, model, x, mode=2, refield=32, min_size=256, modulo=16, noise_level=curr_sigma*255, \
-            #   model_out_type=model_out_type, diffusion=diffusion, ddim_sample=ddim_sample, alphas_cumprod=alphas_cumprod)
-
+            else:
+                x = utils_model.model_fn(x, noise_level=curr_sigma*255, model_out_type=model_out_type, \
+                        model_diffusion=model, diffusion=diffusion, ddim_sample=config.ddim_sample, alphas_cumprod=alphas_cumprod)
+            # x = utils_model.test_mode(model_fn, x, mode=0, refield=32, min_size=256, modulo=16, noise_level=sigmas[i].cpu().numpy()*255)
             # --------------------------------
-            # step 2, FFT
+            # step 2, closed-form solution
             # --------------------------------
 
-            if seq[i] != seq[-1]:
-                if config.generate_mode == 'DiffPIR':
-                    if config.sub_1_analytic:
-                        if model_out_type == 'pred_xstart':
-                            tau = rhos[t_i].float().repeat(1, 1, 1, 1)
-                            # when noise level less than given image noise, skip
-                            if i < config.num_train_timesteps-noise_model_t: 
-                                x0_p = x0 / 2 + 0.5
-                                x0_p = sr.data_solution(x0_p.float(), FB, FBC, F2B, FBFy, tau, config.sf)
-                                x0_p = x0_p * 2 - 1
-                                # effective x0
-                                x0 = x0 + config.guidance_scale * (x0_p-x0)
-                            else:
-                                model_out_type = 'pred_x_prev'
-                                x0 = utils_model.model_fn(x, noise_level=curr_sigma*255, model_out_type=model_out_type, \
-                                        model_diffusion=model, diffusion=diffusion, ddim_sample=config.ddim_sample, alphas_cumprod=alphas_cumprod)
-                                # x0 = utils_model.test_mode(utils_model.model_fn, model, x, mode=2, refield=32, min_size=256, modulo=16, noise_level=curr_sigma*255, \
-                                #   model_out_type=model_out_type, diffusion=diffusion, ddim_sample=ddim_sample, alphas_cumprod=alphas_cumprod)
-                                pass
-                    else:
-                        # zeta=0.28; lambda_=7
-                        x0 = x0.requires_grad_()
-                        # first order solver
-                        def Tx(x):
-                            x = x / 2 + 0.5
-                            pad_2d = torch.nn.ReflectionPad2d(kernel.shape[0]//2)
-                            x_deblur = F.conv2d(pad_2d(x), k_4d)
-                            return x_deblur
-                        norm_grad, norm = utils_model.grad_and_value(operator=Tx,x=x0, x_hat=x0, measurement=y)
-                        x0 = x0 - norm_grad * norm / (rhos[t_i])
-                        x0 = x0.detach_()
-                        pass                               
-                elif 'DPS' in config.generate_mode:
-                    def Tx(x):
-                        x = x / 2 + 0.5
-                        pad_2d = torch.nn.ReflectionPad2d(k.shape[0]//2)
-                        x_deblur = F.conv2d(pad_2d(x), k_4d)
-                        return x_deblur
-                        #return kernel.forward(x)                         
-                    if config.generate_mode == 'DPS_y0':
-                        norm_grad, norm = utils_model.grad_and_value(operator=Tx,x=x, x_hat=x0, measurement=y)
-                        #norm_grad, norm = utils_model.grad_and_value(operator=Tx,x=xt, x_hat=x0, measurement=y)    # does not work
-                        x = xt - norm_grad * 1. #norm / (2*rhos[t_i]) 
-                        x = x.detach_()
-                        pass
-                    elif config.generate_mode == 'DPS_yt':
-                        y_t = sqrt_alphas_cumprod[t_i] * (2*y-1) + sqrt_1m_alphas_cumprod[t_i] * torch.randn_like(y) # add AWGN
-                        y_t = y_t/2 + 0.5
-                        ### it's equivalent to use x & xt (?), but with xt the computation is faster.
-                        #norm_grad, norm = utils_model.grad_and_value(operator=Tx,x=x, x_hat=xt, measurement=y_t)
-                        norm_grad, norm = utils_model.grad_and_value(operator=Tx,x=xt, x_hat=xt, measurement=y_t)
-                        x = xt - norm_grad * lambda_ * norm / (rhos[t_i]) * 0.35
-                        x = x.detach_()
-                        pass
+            if (config.generate_mode == 'DiffPIR') and not (seq[i] == seq[-1]): 
+                # solve sub-problem
+                if config.sub_1_analytic:
+                    if model_out_type == 'pred_xstart':
+                        # when noise level less than given image noise, skip
+                        if i < config.num_train_timesteps-noise_model_t:    
+                            x0_p = (mask*y + rhos[t_i].float()*x0).div(mask+rhos[t_i])
+                            x0 = x0 + config.guidance_scale * (x0_p-x0)
+                        else:
+                            model_out_type = 'pred_x_prev'
+                            x0 = utils_model.model_fn(x, noise_level=curr_sigma*255, model_out_type=model_out_type, \
+                                model_diffusion=model, diffusion=diffusion, ddim_sample=config.ddim_sample, alphas_cumprod=alphas_cumprod)
+                            pass
+                    elif model_out_type == 'pred_x_prev':
+                        # when noise level less than given image noise, skip
+                        if i < config.num_train_timesteps-noise_model_t:    
+                            x = (mask*y + rhos[t_i].float()*x).div(mask+rhos[t_i]) # y-->yt ?
+                        else:
+                            pass
+                else:
+                    raise NotImplementedError("First order solver for data-fitting term is not implemented for inpainting yet")
+                    # TODO: first order solver
+                    # x = x - 1 / (2*rhos[t_i]) * (x - y_t) * mask 
+                    pass
 
-            if (config.generate_mode == 'DiffPIR' and model_out_type == 'pred_xstart') and not (seq[i] == seq[-1] and u == config.iter_num_U-1):
-                #x = sqrt_alphas_cumprod[t_i] * (x0) + (sqrt_1m_alphas_cumprod[t_i]) *  torch.randn_like(x)
+            if (model_out_type == 'pred_xstart') and not (seq[i] == seq[-1]):
+                # x = sqrt_alphas_cumprod[t_i] * (x) + (sqrt_1m_alphas_cumprod[t_i]) *  torch.randn_like(x) # x = sqrt_alphas_cumprod[t_i] * (x) + (sqrt_1m_alphas_cumprod[t_i]) *  torch.randn_like(x)
                 
                 t_im1 = utils_model.find_nearest(reduced_alpha_cumprod,sigmas[seq[i+1]].cpu().numpy())
                 # calculate \hat{\eposilon}
@@ -339,10 +301,7 @@ def apply_DiffPIR_for_deblurring(
                 eta_sigma = config.eta * sqrt_1m_alphas_cumprod[t_im1] / sqrt_1m_alphas_cumprod[t_i] * torch.sqrt(betas[t_i])
                 x = sqrt_alphas_cumprod[t_im1] * x0 + np.sqrt(1-zeta) * (torch.sqrt(sqrt_1m_alphas_cumprod[t_im1]**2 - eta_sigma**2) * eps \
                             + eta_sigma * torch.randn_like(x)) + np.sqrt(zeta) * sqrt_1m_alphas_cumprod[t_im1] * torch.randn_like(x)
-            else:
-                # x = x0
-                pass
-                
+
             # set back to x_t from x_{t-1}
             if u < config.iter_num_U-1 and seq[i] != seq[-1]:
                 # x = torch.sqrt(alphas[t_i]) * x + torch.sqrt(betas[t_i]) * torch.randn_like(x)
@@ -362,7 +321,7 @@ def apply_DiffPIR_for_deblurring(
                 logger.info(f"{seq[i]} | steps {t_i} | np.max(x_show): {np.max(x_show):.4f} | np.min(x_show): {np.min(x_show):.4f}")            
             if config.show_img:
                 util.imshow(x_show)
-
+                
     # --------------------------------
     # (5) comppute scores with restored image
     # --------------------------------
@@ -391,6 +350,9 @@ def apply_DiffPIR_for_deblurring(
 
     if config.save_restoration:
         util.imsave(img_E, os.path.join(RESTORED_DATA_PATH, f"{img_name}_{config.model_name}.{img_ext}"))
+        
+    if config.save_LEH:
+        util.imsave(np.concatenate([util.single2uint(img_L), img_E, img_H], axis=1), os.path.join(RESTORED_DATA_PATH, f"{img_name}_{config.model_name}_LEH.{img_ext}"))
 
     if config.save_progressive:
         now = datetime.now()
@@ -399,21 +361,18 @@ def apply_DiffPIR_for_deblurring(
         if config.show_img:
             util.imshow(img_total,figsize=(80,4))
         util.imsave(img_total*255., os.path.join(RESTORED_DATA_PATH, img_name+'_sigma_{:.3f}_process_lambda_{:.3f}_{}_psnr_{:.4f}.{}'.format(config.noise_level_img,lambda_,current_time,psnr,img_ext)))
-                                                                    
-    # --------------------------------
-    # (6) img_LEH
-    # --------------------------------
-
-    if config.save_LEH:
-        img_L = util.single2uint(img_L)
-        k_v = kernel/np.max(kernel)*1.0
-        k_v = util.single2uint(np.tile(k_v[..., np.newaxis], [1, 1, 3]))
-        k_v = cv2.resize(k_v, (3*k_v.shape[1], 3*k_v.shape[0]), interpolation=cv2.INTER_NEAREST)
-        img_I = cv2.resize(img_L, (config.sf*img_L.shape[1], config.sf*img_L.shape[0]), interpolation=cv2.INTER_NEAREST)
-        img_I[:k_v.shape[0], -k_v.shape[1]:, :] = k_v
-        img_I[:img_L.shape[0], :img_L.shape[1], :] = img_L
-        util.imshow(np.concatenate([img_I, img_E, img_H], axis=1), title='LR / Recovered / Ground-truth') if config.show_img else None
-        util.imsave(np.concatenate([img_I, img_E, img_H], axis=1), os.path.join(RESTORED_DATA_PATH, f"{img_name}_LEH.{img_ext}"))
+        images = []
+        y_t = np.squeeze((y/2+0.5).cpu().numpy())
+        if y_t.ndim == 3:
+            y_t = np.transpose(y_t, (1, 2, 0))
+        if config.generate_mode in ['repaint','DiffPIR']:
+            for x in progress_img:
+                images.append((y_t)* mask+ (1-mask) * x)
+            img_total = cv2.hconcat(images)
+            if config.show_img:
+                util.imshow(img_total,figsize=(80,4))
+            if config.save_progressive_mask:
+                util.imsave(img_total*255., os.path.join(RESTORED_DATA_PATH, img_name+'_process_mask_lambda_{:.3f}_{}{}'.format(lambda_,current_time,img_ext)))
 
     return img_E, metrics
     
@@ -422,24 +381,18 @@ def main():
 
     img = "69037" # image name without extension in the test location described in the configuration
 
-    config = DiffPIRDeblurConfig()
-
-    # Create the blur kernel
-    k, k_4d = create_blur_kernel(
-        use_DIY_kernel=config.use_DIY_kernel,
-        blur_mode=config.blur_mode,
-        kernel_size=config.kernel_size,
-        seed=config.seed,
-        cwd=config.cwd,
-    )
+    config = DiffPIRInpaintingConfig()
 
     # Build path to the image <img>
     img_path = manually_build_image_path(img, config.testset_name, config.cwd)
     # print(f"Image path: {img_path}")
+    
+    # Load mask
+    mask = load_masks("random_masks")[0]
 
     # Create the degraded image
-    img_L, img_H, img_name, img_ext = create_blurred_and_noised_image(
-        kernel=k, 
+    img_L, img_H, img_name, img_ext = create_masked_image(
+        mask=mask, 
         img=img_path,
         n_channels=config.n_channels,
         noise_level_img=config.noise_level_img,

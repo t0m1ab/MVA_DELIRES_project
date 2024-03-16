@@ -10,10 +10,10 @@ from delires.params import (
     RESTORED_DATA_PATH
 )
 import delires.utils.utils_image as utils_image
-from delires.data import blur, load_blur_kernel
+from delires.data import blur, load_blur_kernel, load_masks, apply_mask
 
 
-def data_consistency_mse(degraded_dataset_name: str, degraded_image_filename: str, reconstructed_image: np.ndarray, task: TASK, kernel_filename: str = None):
+def data_consistency_mse(degraded_dataset_name: str, degraded_image_filename: str, reconstructed_image: np.ndarray, task: TASK, operator_filename: str = None, mask_index:int = None):
     """
     Compute the data consistency norm between the clean and the reconstructed image.
     
@@ -22,7 +22,7 @@ def data_consistency_mse(degraded_dataset_name: str, degraded_image_filename: st
         - degraded_image_name (str): Name of the degraded image.
         - reconstructed_image (np.ndarray): the reconstructed image in uint8.
         - task (TASK): the task to perform.
-        - kernel_filename (str): Name of the kernel (without extension).
+        - operator_filename (str): Name of the operator (without extension).
     """
     # load degraded image
     degraded_image_path = os.path.join(DEGRADED_DATA_PATH, degraded_dataset_name, f"{degraded_image_filename}.png")
@@ -32,20 +32,25 @@ def data_consistency_mse(degraded_dataset_name: str, degraded_image_filename: st
         raise ValueError("The degraded and reconstructed images must be in uint8 format.")
     
     if task == "deblur":
-        if kernel_filename is None:
-            raise ValueError("The kernel filename must be loaded to compute data consistency for deblur task.")
-        kernel = load_blur_kernel(kernel_filename)
+        kernel = load_blur_kernel(operator_filename)
         return utils_image.mse(degraded_image, blur(reconstructed_image, kernel))
+    elif task == "inpaint":
+        if mask_index is None:
+            raise ValueError("mask_index must be provided to compute consistency norm for inpainting task.")
+        mask = load_masks(operator_filename)[mask_index]
+        masked_reconstruction = utils_image.single2uint(apply_mask(utils_image.uint2single(reconstructed_image), mask))
+        return utils_image.mse(degraded_image, masked_reconstruction)
     else:
         raise NotImplementedError(f"Data consistency norm not implemented for task {task}.")
     
 
-def process_raw_metrics(raw_metrics: dict):
+def process_raw_metrics(raw_metrics: dict, calc_LPIPS:bool = False):
     """
     Process the raw metrics to compute the final metrics.
     
     ARGUMENTS:
         - raw_metrics (dict): the raw metrics.
+        - calc_LPIPS (bool): whether to compute LPIPS or not.
         
     RETURNS:
         - metrics (dict): the final metrics.
@@ -79,25 +84,29 @@ def process_raw_metrics(raw_metrics: dict):
         metrics["coverage"][img_name] = np.mean(coverage)
     
     # LPIPS
-    metrics["LPIPS"]["overall"] = np.mean(list(raw_metrics["LPIPS"].values()))
-    for img_name, lpips in raw_metrics["LPIPS"].items():
-        metrics["LPIPS"][img_name] = np.mean(lpips)
+    if calc_LPIPS:
+        metrics["LPIPS"]["overall"] = np.mean(list(raw_metrics["LPIPS"].values()))
+        for img_name, lpips in raw_metrics["LPIPS"].items():
+            metrics["LPIPS"][img_name] = np.mean(lpips)
     
     return metrics
 
 
-def report_metrics(raw_metrics: dict, fid: float, exp_path: str):
-    metrics = process_raw_metrics(raw_metrics)
+def report_metrics(raw_metrics: dict, fid: float, exp_path: str, calc_LPIPS:bool = False):
+    metrics = process_raw_metrics(raw_metrics, calc_LPIPS)
     img_names = list(metrics["PSNR"].keys())[1:]
     with open(exp_path, mode='w') as file:
         writer = csv.writer(file, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
-        fields = ["img", "PSNR", "datafit_RMSE", "average_image_std", "coverage", "LPIPS", "FID"]
-        writer.writerow(fields + ["FID"])
-        writer.writerow(["Overall"] + [metrics[field]["overall"] for field in fields[1:-2]] + [fid])
+        if calc_LPIPS:
+            fields = ["img", "PSNR", "datafit_RMSE", "average_image_std", "coverage", "LPIPS", "FID"]
+        else:
+            fields = ["img", "PSNR", "datafit_RMSE", "average_image_std", "coverage", "FID"]
+        writer.writerow(fields)
+        writer.writerow(["Overall"] + [metrics[field]["overall"] for field in fields[1:-1]] + [fid])
         for img in img_names:
             writer.writerow(
                 [img]
-                + [np.mean(metrics[field][img]) for field in fields[1:-2]]
+                + [np.mean(metrics[field][img]) for field in fields[1:-1]]
                 )
             
             

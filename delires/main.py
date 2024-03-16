@@ -8,8 +8,8 @@ import torch
 import delires.utils.utils as utils
 from delires.utils.utils_logger import logger_info
 import delires.utils.utils_image as utils_image
-from delires.methods.register import DIFFUSER_TYPE, DIFFUSERS
-from delires.methods.diffpir.diffpir_configs import DiffPIRConfig, DiffPIRDeblurConfig
+from delires.methods.register import DIFFUSER_TYPE, DIFFUSERS, DIFFUSER_CONFIG, TASK_CONFIG
+from delires.methods.diffpir.diffpir_configs import DiffPIRConfig, DiffPIRDeblurConfig, DiffPIRInpaintingConfig
 from delires.data import all_files_exist
 from delires.fid import fid_score
 from delires.metrics import data_consistency_mse, report_metrics, save_std_image
@@ -27,10 +27,9 @@ def run_experiment(
     diffuser_type: DIFFUSER_TYPE,
     task: TASK, 
     degraded_dataset_name: str,
-    diffuser_config: DiffPIRConfig,
-    diffuser_task_config: DiffPIRDeblurConfig,
+    diffuser_config: DIFFUSER_CONFIG,
+    diffuser_task_config: TASK_CONFIG,
     nb_gen: int = 1,
-    kernel_name: str|None = None,
     fid_dims: int = 2048,
     fid_kept_eigenvectors: int|None = None,
     ):
@@ -45,7 +44,7 @@ def run_experiment(
     # create experiment folder
     experiment_path = os.path.join(RESTORED_DATA_PATH, exp_name)
     Path(experiment_path).mkdir(parents=True, exist_ok=True)
-    
+        
     # Save configs
     utils.archive_kwargs(diffuser_config.__dict__, os.path.join(RESTORED_DATA_PATH, exp_name, "diffuser_config.json"))
     utils.archive_kwargs(diffuser_task_config.__dict__, os.path.join(RESTORED_DATA_PATH, exp_name, "diffuser_task_config.json"))
@@ -64,11 +63,16 @@ def run_experiment(
 
     # instantiate diffuser
     dataset_infos = utils.load_json(os.path.join(DEGRADED_DATA_PATH, degraded_dataset_name, "dataset_info.json"))
-    kernel_name = dataset_infos["kernel_name"] if "kernel_name" in dataset_infos else None
-    if kernel_name is None:
-        raise ValueError("No kernel found for the given dataset. Please manually select a kernel.")
-    diffpir_diffuser = DIFFUSERS[diffuser_type](diffuser_config, logger=logger, device=device)
-    diffpir_diffuser.load_blur_kernel(kernel_name)
+    diffuser = DIFFUSERS[diffuser_type](diffuser_config, logger=logger, device=device)
+    if task == "deblur":
+        operator_name = dataset_infos["kernel_name"] if "kernel_name" in dataset_infos else None
+        if operator_name is None:
+            raise ValueError("No kernel found for the given dataset. Please manually select a kernel.")
+        diffuser.load_blur_kernel(operator_name)
+    elif task == "inpaint":
+        operator_name = dataset_infos["masks_name"] if "masks_name" in dataset_infos else None
+        if operator_name is None:
+            raise ValueError("No set of masks found for the given dataset. Please manually select a set of masks.")
     
     # check the datasets (same number of images, same names, same extensions, etc.)
     if not all_files_exist(filenames=dataset_infos["images"], path=CLEAN_DATA_PATH, ext="png"):
@@ -87,7 +91,8 @@ def run_experiment(
         "coverage": {},  # TODO
         "LPIPS": {},  # computed on-the-run
         }
-    for img_name in dataset_infos["images"]:
+    for i, img_name in enumerate(dataset_infos["images"][:2]):
+        mask_index = None
         img_mse_to_clean = []
         img_mse_to_degraded = []
         img_coverage = []
@@ -101,19 +106,30 @@ def run_experiment(
 
             # apply the method (don't save the image in apply_task by default because there are multiple generations to save)
             if task == "deblur":
-                restored_image, metrics = diffpir_diffuser.apply_debluring(
+                restored_image, metrics = diffuser.apply_debluring(
                     config=diffuser_task_config,
                     clean_image_filename=img_name,
                     degraded_image_filename=img_name,
                     degraded_dataset_name=degraded_dataset_name,
                     experiment_name=exp_name,
-                    kernel_filename=kernel_name,
+                    kernel_filename=operator_name,
+                )
+            elif task == "inpaint":
+                mask_index = i
+                diffuser.load_mask(operator_name, mask_index)
+                restored_image, metrics = diffuser.apply_inpainting(
+                    config=diffuser_task_config,
+                    clean_image_filename=img_name,
+                    degraded_image_filename=img_name,
+                    degraded_dataset_name=degraded_dataset_name,
+                    masks_filename=operator_name,
+                    mask_index=mask_index,
                 )
             else:
                 raise NotImplementedError
 
             # save the restored image (with "_genX" suffix where X is the generation index)
-            diffpir_diffuser.save_restored_image(
+            diffuser.save_restored_image(
                 restored_image=restored_image,
                 restored_image_filename=f"gen{gen_idx}",
                 path=os.path.join(RESTORED_DATA_PATH, exp_name, f"img_{img_name}"),
@@ -121,7 +137,7 @@ def run_experiment(
             
             # compute and store metrics
             img_mse_to_clean.append(utils_image.mse(restored_image, clean_image))
-            img_mse_to_degraded.append(data_consistency_mse(degraded_dataset_name, img_name, restored_image, task, kernel_name))
+            img_mse_to_degraded.append(data_consistency_mse(degraded_dataset_name, img_name, restored_image, task, operator_name, mask_index))
             img_coverage.append(0)
             if diffuser_task_config.calc_LPIPS:
                 img_lpips.append(metrics["lpips"])
@@ -137,7 +153,8 @@ def run_experiment(
         exp_raw_metrics["MSE_to_degraded"][img_name] = img_mse_to_degraded
         exp_raw_metrics["average_image_std"][img_name] = [np.mean(std_image)]
         exp_raw_metrics["coverage"][img_name] = img_coverage
-        exp_raw_metrics["LPIPS"][img_name] = list(img_lpips)
+        if diffuser_task_config.calc_LPIPS:
+            exp_raw_metrics["LPIPS"][img_name] = list(img_lpips)
         
     # Save metrics once before computing FID
     np.savez(os.path.join(RESTORED_DATA_PATH, exp_name, "metrics.npz"), **exp_raw_metrics)
@@ -146,23 +163,39 @@ def run_experiment(
     fid = fid_score.calculate_fid_given_paths(paths=[CLEAN_DATA_PATH, os.path.join(RESTORED_DATA_PATH, exp_name)], batch_size=5, device=device, dims=fid_dims, keep_eigen=fid_kept_eigenvectors)
     np.savez(os.path.join(RESTORED_DATA_PATH, exp_name, "metrics.npz"), **exp_raw_metrics, fid=fid)
     
-    report_metrics(exp_raw_metrics, fid, os.path.join(RESTORED_DATA_PATH, exp_name, "metrics.csv"))        
+    report_metrics(exp_raw_metrics, fid, os.path.join(RESTORED_DATA_PATH, exp_name, "metrics.csv"), diffuser_task_config.calc_LPIPS)        
     
 
 def main():
     
-    exp_name = "test_theilo"
-    degraded_dataset_name = "test_theilo"
+    # # Deblurring
+    # exp_name = "test_exp_diffpir_deblur"
+    # degraded_dataset_name = "blurred_dataset"
+    
+    # run_experiment(
+    #     exp_name=exp_name,
+    #     diffuser_type="diffpir",
+    #     task="deblur",
+    #     degraded_dataset_name=degraded_dataset_name,
+    #     diffuser_config=DiffPIRConfig(),
+    #     diffuser_task_config=DiffPIRDeblurConfig(),
+    #     nb_gen=2,
+    #     fid_dims=192,
+    #     fid_kept_eigenvectors=157,
+    # )
+    
+    # Inpainting
+    exp_name = "test_exp_diffpir_inpaint"
+    degraded_dataset_name = "masked_dataset"
     
     run_experiment(
         exp_name=exp_name,
         diffuser_type="diffpir",
-        task="deblur",
+        task="inpaint",
         degraded_dataset_name=degraded_dataset_name,
         diffuser_config=DiffPIRConfig(),
-        diffuser_task_config=DiffPIRDeblurConfig(),
+        diffuser_task_config=DiffPIRInpaintingConfig(),
         nb_gen=2,
-        kernel_name=None,
         fid_dims=192,
         fid_kept_eigenvectors=157,
     )
