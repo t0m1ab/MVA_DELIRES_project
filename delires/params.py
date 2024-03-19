@@ -9,7 +9,7 @@ TASK = Literal["deblur", "inpaint"]
 
 MODELS_PATH = os.path.join(delires.__path__[0], "models")
 OPERATORS_PATH = os.path.join(delires.__path__[0], "operators")
-CLEAN_DATA_PATH = os.path.join(delires.__path__[0], "data/clean_images")
+CLEAN_DATA_PATH = os.path.join(delires.__path__[0], "data/ffhq_small_test")
 DEGRADED_DATA_PATH = os.path.join(delires.__path__[0], "data/degraded_datasets")
 RESTORED_DATA_PATH = os.path.join(delires.__path__[0], "results")
 

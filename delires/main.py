@@ -10,6 +10,8 @@ from delires.utils.utils_logger import logger_info
 import delires.utils.utils_image as utils_image
 from delires.methods.register import DIFFUSER_TYPE, DIFFUSERS, DIFFUSER_CONFIG, TASK_CONFIG
 from delires.methods.diffpir.diffpir_configs import DiffPIRConfig, DiffPIRDeblurConfig, DiffPIRInpaintingConfig
+from delires.methods.dps.dps_configs import DPSConfig, DPSDeblurConfig, DPSInpaintingConfig
+from delires.methods.pigdm.pigdm_configs import PiGDMConfig, PiGDMDeblurConfig, PiGDMInpaintingConfig
 from delires.data import all_files_exist
 from delires.fid import fid_score
 from delires.metrics import data_consistency_mse, report_metrics, save_std_image
@@ -91,7 +93,7 @@ def run_experiment(
         "coverage": {},  # TODO
         "LPIPS": {},  # computed on-the-run
         }
-    for i, img_name in enumerate(dataset_infos["images"][:2]):
+    for i, img_name in enumerate(dataset_infos["images"]):
         mask_index = None
         img_mse_to_clean = []
         img_mse_to_degraded = []
@@ -164,41 +166,41 @@ def run_experiment(
     np.savez(os.path.join(RESTORED_DATA_PATH, exp_name, "metrics.npz"), **exp_raw_metrics, fid=fid)
     
     report_metrics(exp_raw_metrics, fid, os.path.join(RESTORED_DATA_PATH, exp_name, "metrics.csv"), diffuser_task_config.calc_LPIPS)        
-    
+
 
 def main():
     
-    # # Deblurring
-    # exp_name = "test_exp_diffpir_deblur"
-    # degraded_dataset_name = "blurred_dataset"
-    
-    # run_experiment(
-    #     exp_name=exp_name,
-    #     diffuser_type="diffpir",
-    #     task="deblur",
-    #     degraded_dataset_name=degraded_dataset_name,
-    #     diffuser_config=DiffPIRConfig(),
-    #     diffuser_task_config=DiffPIRDeblurConfig(),
-    #     nb_gen=2,
-    #     fid_dims=192,
-    #     fid_kept_eigenvectors=157,
-    # )
-    
-    # Inpainting
-    exp_name = "test_exp_diffpir_inpaint"
-    degraded_dataset_name = "masked_dataset"
+    # Deblurring
+    exp_name = "test_exp_diffpir_deblur"
+    degraded_dataset_name = "blurred_dataset"
     
     run_experiment(
         exp_name=exp_name,
         diffuser_type="diffpir",
-        task="inpaint",
+        task="deblur",
         degraded_dataset_name=degraded_dataset_name,
         diffuser_config=DiffPIRConfig(),
-        diffuser_task_config=DiffPIRInpaintingConfig(),
+        diffuser_task_config=DiffPIRDeblurConfig(),
         nb_gen=2,
         fid_dims=192,
         fid_kept_eigenvectors=157,
     )
+    
+    # # Inpainting
+    # exp_name = "test_exp_diffpir_inpaint"
+    # degraded_dataset_name = "masked_dataset"
+    
+    # run_experiment(
+    #     exp_name=exp_name,
+    #     diffuser_type="diffpir",
+    #     task="inpaint",
+    #     degraded_dataset_name=degraded_dataset_name,
+    #     diffuser_config=DiffPIRConfig(),
+    #     diffuser_task_config=DiffPIRInpaintingConfig(),
+    #     nb_gen=2,
+    #     fid_dims=192,
+    #     fid_kept_eigenvectors=157,
+    # )
 
 
 if __name__ == "__main__":

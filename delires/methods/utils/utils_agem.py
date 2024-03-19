@@ -191,6 +191,15 @@ def get_mean_conv(kmap, basis):
 def get_mean_conv_batch(kmap, basis):
     return torch.cat([get_mean_conv(k, b)[None] for k,b in zip(kmap, basis)])
 
+def pinv_inpainting(x, mask, r=1, sigma=1e-8):
+    den = r ** 2 + sigma ** 2 * torch.ones_like(mask)
+    return torch.div(x, den)
+
+def inpainting_guidance(y, x, mask, sigma=0, r=1):
+    if sigma == 0:
+        sigma += 1e-8
+    return pinv_inpainting(y, mask, r=r, sigma=sigma) - pinv_inpainting(mask*x, mask, r=r, sigma=sigma)
+
 def kernel_shift(kernel, sf):
     # There are two reasons for shifting the kernel :
     # 1. Center of mass is not in the center of the kernel which creates ambiguity. There is no possible way to know

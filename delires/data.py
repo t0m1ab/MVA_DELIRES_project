@@ -404,13 +404,13 @@ def generate_degraded_dataset_masked(
 
 def main():
 
-    # # Generate blurred dataset
-    # seed = 0
-    # kernel_name = "gaussian_kernel_05"
-    # noise_level_img = 12.75/255.0 # 0.05
-    # # blur_kernel = create_blur_kernel("Gaussian", 61, seed, kernel_name, "cpu")
-    # blur_kernel = load_blur_kernel(kernel_name)
-    # generate_degraded_dataset_blurred("blurred_dataset", blur_kernel, kernel_name, 3, noise_level_img, seed, False)
+    # Generate blurred dataset
+    seed = 0
+    kernel_name = "gaussian_kernel_05"
+    noise_level_img = 12.75/255.0 # 0.05
+    # blur_kernel = create_blur_kernel("Gaussian", 61, seed, kernel_name, "cpu")
+    blur_kernel = load_blur_kernel(kernel_name)
+    generate_degraded_dataset_blurred("blurred_ffhq", blur_kernel, kernel_name, 3, noise_level_img, seed, False)
 
     # # Generate downsampled dataset
     # seed = 0
@@ -425,10 +425,10 @@ def main():
     #     kernel = None
     # generate_degraded_dataset_downsampled("downsampled_dataset", kernel, kernel_name, 3, sr_mode, False, 4, 0.05, seed, False)
     
-    # Generate masked dataset
-    seed = 0
-    masks_name = "box_masks"
-    noise_level_img = 12.75/255.0 # 0.05
+    # # Generate masked dataset
+    # seed = 0
+    # masks_name = "box_masks"
+    # noise_level_img = 12.75/255.0 # 0.05
     # masks = create_inpainting_masks(
     #     mask_type = "box",
     #     mask_len_range = [96, 128],
@@ -436,12 +436,12 @@ def main():
     #     image_shape = (256, 256),
     #     n_channels = 3,
     #     margin = (16, 16),
-    #     number_masks = 6,
+    #     number_masks = 20,
     #     masks_save_name = masks_name,
     #     seed = seed
     #     )
-    masks = load_masks(masks_name)
-    generate_degraded_dataset_masked("masked_dataset", masks, masks_name, 3, noise_level_img, seed, False)
+    # # masks = load_masks(masks_name)
+    # generate_degraded_dataset_masked("masked_dataset", masks, masks_name, 3, noise_level_img, seed, False)
 
 if __name__ == "__main__":
     main()

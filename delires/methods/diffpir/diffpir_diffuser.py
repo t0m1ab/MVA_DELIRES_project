@@ -12,7 +12,7 @@ from delires.methods.diffpir.utils import utils_model
 from delires.methods.diffpir.guided_diffusion.unet import UNetModel
 from delires.methods.diffpir.guided_diffusion.respace import SpacedDiffusion
 from delires.methods.diffpir.diffpir_deblur import apply_DiffPIR_for_deblurring
-from delires.methods.diffpir.diffpir_inpaint import apply_DiffPIR_for_inpainting
+from delires.methods.diffpir.diffpir_inpainting import apply_DiffPIR_for_inpainting
 
 from delires.methods.diffpir.guided_diffusion.script_util import (
     model_and_diffusion_defaults,
@@ -278,46 +278,46 @@ def main():
         torch.cuda.empty_cache()
 
 
-    # # quick demo of the DiffPIR deblurring
-
-    # diffpir_config = DiffPIRConfig()
-    # diffpir_diffuser = DiffPIRDiffuser(diffpir_config, autolog="diffpir_debluring_test", device=device)
-
-    # diffpir_diffuser.load_blur_kernel("gaussian_kernel_05")
-    # # diffpir_diffuser.load_blur_kernel("motion_kernel_1")
-
-    # diffpir_deblur_config = DiffPIRDeblurConfig()
-    # img_name = "theilo"
-    # _ = diffpir_diffuser.apply_debluring(
-    #     config=diffpir_deblur_config,
-    #     clean_image_filename=img_name,
-    #     degraded_image_filename=img_name,
-    #     degraded_dataset_name="blurred_dataset",
-    #     kernel_filename="gaussian_kernel_05",
-    #     save=True, # we save the image on the fly for the demo
-    # )
-    
-    
-    # quick demo of the DiffPIR inpainting
+    # quick demo of the DiffPIR deblurring
 
     diffpir_config = DiffPIRConfig()
-    diffpir_diffuser = DiffPIRDiffuser(diffpir_config, autolog="diffpir_inpainting_test", device=device)
+    diffpir_diffuser = DiffPIRDiffuser(diffpir_config, autolog="diffpir_debluring_test", device=device)
 
-    masks_name = "random_masks"
-    mask_index = 0
-    diffpir_diffuser.load_mask(masks_name, mask_index)    
+    diffpir_diffuser.load_blur_kernel("gaussian_kernel_05")
+    # diffpir_diffuser.load_blur_kernel("motion_kernel_1")
 
-    diffpir_inpaint_config = DiffPIRInpaintingConfig()
-    img_name = "69037"
-    _ = diffpir_diffuser.apply_inpainting(
-        config=diffpir_inpaint_config,
+    diffpir_deblur_config = DiffPIRDeblurConfig()
+    img_name = "0"
+    _ = diffpir_diffuser.apply_debluring(
+        config=diffpir_deblur_config,
         clean_image_filename=img_name,
         degraded_image_filename=img_name,
-        degraded_dataset_name="masked_dataset",
-        masks_filename=masks_name,
-        mask_index=mask_index,
+        degraded_dataset_name="blurred_ffhq",
+        kernel_filename="gaussian_kernel_05",
         save=True, # we save the image on the fly for the demo
     )
+    
+    
+    # # quick demo of the DiffPIR inpainting
+
+    # diffpir_config = DiffPIRConfig()
+    # diffpir_diffuser = DiffPIRDiffuser(diffpir_config, autolog="diffpir_inpainting_test", device=device)
+
+    # masks_name = "box_masks"
+    # mask_index = 0
+    # diffpir_diffuser.load_mask(masks_name, mask_index)    
+
+    # diffpir_inpaint_config = DiffPIRInpaintingConfig()
+    # img_name = "0"
+    # _ = diffpir_diffuser.apply_inpainting(
+    #     config=diffpir_inpaint_config,
+    #     clean_image_filename=img_name,
+    #     degraded_image_filename=img_name,
+    #     degraded_dataset_name="masked_dataset",
+    #     masks_filename=masks_name,
+    #     mask_index=mask_index,
+    #     save=True, # we save the image on the fly for the demo
+    # )
 
 
 if __name__ == "__main__":

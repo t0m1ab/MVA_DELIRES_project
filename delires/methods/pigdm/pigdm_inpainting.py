@@ -3,31 +3,28 @@ import numpy as np
 import torch
 from tqdm import tqdm
 from logging import Logger
-from diffusers import DDPMPipeline, DDPMScheduler, UNet2DModel
+from diffusers import DDPMScheduler, UNet2DModel
 
 from delires.utils.utils_image import get_infos_img
 import delires.methods.utils.utils_agem as utils_agem
 import delires.methods.utils.utils_image as utils_image
-from delires.methods.utils.utils import adapt_kernel_dps_pigdm, adapt_image_dps_pigdm, alpha_beta
-from delires.methods.pigdm.pigdm_configs import PiGDMConfig, PiGDMDeblurConfig
-from delires.methods.diffpir.guided_diffusion.unet import UNetModel
-from delires.methods.diffpir.guided_diffusion.respace import SpacedDiffusion
-from delires.methods.diffpir.utils import utils_model
-from delires.methods.diffpir.utils.delires_utils import plot_sequence
+from delires.methods.utils.utils import adapt_mask_dps_pigdm, adapt_image_dps_pigdm
+from delires.methods.pigdm.pigdm_configs import PiGDMConfig, PiGDMInpaintingConfig
 from delires.methods.pigdm.pigdm_sampling import pigdm_sampling
 
 from delires.params import RESTORED_DATA_PATH
 
 
 
-def apply_PiGDM_for_deblurring(
-        config: PiGDMDeblurConfig,
+def apply_PiGDM_for_inpainting(
+        config: PiGDMInpaintingConfig,
         clean_image_filename: str,
         degraded_image_filename: str,
-        kernel_filename: str,
+        masks_filename: str,
+        mask_index: int,
         clean_image: np.ndarray,
         degraded_image: np.ndarray,
-        kernel: np.ndarray,
+        mask: np.ndarray,
         model: UNet2DModel,
         scheduler: DDPMScheduler,
         img_ext: str = "png",
@@ -35,13 +32,13 @@ def apply_PiGDM_for_deblurring(
         device = "cpu"
     ) -> tuple[np.ndarray, dict]:
     """
-    Apply PiGDM for deblurring to a given degraded image.
+    Apply PiGDM for inpainting to a given degraded image.
 
     ARGUMENTS:
-        [See delires.diffusers.diffpir.diffpir_deblur.apply_DiffPIR_for_deblurring]
+        [See delires.diffusers.diffpir.diffpir_inpainting.apply_DiffPIR_for_inpainting]
 
     TIPS:
-        - sample["kernel"], sample["L"] and sample["H"] must be torch.Tensor with float values in [0,1]
+        - sample["mask"], sample["L"] and sample["H"] must be torch.Tensor with float values in [0,1]
         - x taken as input of the function <forward_model> must be a torch.Tensor with float values in [0,1]
     """
 
@@ -52,19 +49,19 @@ def apply_PiGDM_for_deblurring(
     if logger is not None: # debug logs
         logger.debug(get_infos_img(clean_image))
         logger.debug(get_infos_img(degraded_image))
-        logger.debug(get_infos_img(kernel))
+        logger.debug(get_infos_img(mask))
 
-    # setup data and kernel
+    # setup data and mask
     sample = {
         "H": adapt_image_dps_pigdm(clean_image).to(device),
         "L": adapt_image_dps_pigdm(degraded_image).to(device),
-        "kernel": adapt_kernel_dps_pigdm(kernel).to(device),
+        "mask": adapt_mask_dps_pigdm(mask).to(device),
     }
 
     if logger is not None: # debug logs
         logger.debug(get_infos_img(sample["H"]))
         logger.debug(get_infos_img(sample["L"]))
-        logger.debug(get_infos_img(sample["kernel"]))
+        logger.debug(get_infos_img(sample["mask"]))
 
     # log informations
     if logger is not None:
@@ -72,14 +69,12 @@ def apply_PiGDM_for_deblurring(
         logger.info(f"device: {device}")
         logger.info(f"Clean image: {clean_image_filename}")
         logger.info(f"Degraded image: {degraded_image_filename}")
-        logger.info(f"Kernel: {kernel_filename}")
+        logger.info(f"Masks: {masks_filename}, index: {mask_index}")
 
-    # Forward model (cuda GPU implementation)
-    # forward_model = lambda x: agem.fft_blur(x, sample['kernel'].to(device))
-    # If you are using an MPS gpu use the following forward_model instead
-    # CPU fallback implementation (no MPS support for torch.roll, fft2, Complex Float, etc.)
-    guidance = lambda y, x, sigma, r: utils_agem.deblurring_guidance(y, x, sample['kernel'], sigma=sigma, r=r).to(device)
+    # Guidance (cuda GPU implementation)
+    guidance = lambda y, x, sigma, r: utils_agem.inpainting_guidance(y, x, sample['mask'], sigma=sigma, r=r).to(device)
     y = sample['L'].to(device)
+    mask = sample['mask'].to(device)
 
     # PiGDM sampling
     res = pigdm_sampling(
@@ -87,7 +82,7 @@ def apply_PiGDM_for_deblurring(
         model,
         scheduler, 
         y, 
-        guidance, 
+        guidance,
         scale=1,
         device=device,
         logger=logger,

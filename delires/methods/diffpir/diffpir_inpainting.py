@@ -156,7 +156,7 @@ def apply_DiffPIR_for_inpainting(
         logger.info(f"start step: {t_start} | skip_type: {config.skip_type} | skip interval: {skip} | skipstep analytic steps: {noise_model_t}")
         logger.info(f"Clean image: {clean_image_filename}")
         logger.info(f"Degraded image: {degraded_image_filename}")
-        logger.info(f"Masks: {masks_filename}")
+        logger.info(f"Masks: {masks_filename}, index: {mask_index}")
     
 
     ### 5 - SETUP ADAPTED VAR NAMES FOR THE RESTORATION LOGIC
