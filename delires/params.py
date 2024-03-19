@@ -4,7 +4,6 @@ from typing import Literal
 import delires
 
 
-
 TASK = Literal["deblur", "inpaint"]
 
 MODELS_PATH = os.path.join(delires.__path__[0], "models")

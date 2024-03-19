@@ -9,7 +9,7 @@ from diffusers import DDPMScheduler, UNet2DModel
 from delires.utils.utils_image import get_infos_img
 import delires.methods.utils.utils_agem as utils_agem
 import delires.methods.utils.utils_image as utils_image
-from delires.methods.utils.utils import adapt_kernel_dps_pigdm, adapt_image_dps_pigdm, alpha_beta
+from delires.methods.utils.utils import adapt_kernel_dps_pigdm, alpha_beta
 from delires.methods.dps.dps_configs import DPSConfig, DPSDeblurConfig
 from delires.methods.diffpir.guided_diffusion.unet import UNetModel
 from delires.methods.diffpir.utils.delires_utils import plot_sequence
@@ -110,9 +110,9 @@ def apply_DPS_for_deblurring(
         clean_image_filename: str,
         degraded_image_filename: str,
         kernel_filename: str,
-        clean_image: np.ndarray,
-        degraded_image: np.ndarray,
-        kernel: np.ndarray,
+        clean_image: torch.Tensor,
+        degraded_image: torch.Tensor,
+        kernel: torch.Tensor,
         model: UNet2DModel,
         scheduler: DDPMScheduler,
         img_ext: str = "png",
@@ -123,7 +123,9 @@ def apply_DPS_for_deblurring(
     Apply DPS for deblurring to a given degraded image.
 
     ARGUMENTS:
-        [See delires.diffusers.diffpir.diffpir_deblur.apply_DiffPIR_for_deblurring]
+        - clean_image: np.ndarray float32 of shape (1,C,W,H) containing the clean image (with value clipping because loader from PNG).
+        - degraded_image: np.ndarray float32 of shape (1,C,W,H) containing the degraded image (with or without value clipping).
+        - kernel: np.ndarray float32 of shape (1,1,W,H) containing the blur kernel.
 
     TIPS:
         - sample["kernel"], sample["L"] and sample["H"] must be torch.Tensor with float values in [0,1]
@@ -141,9 +143,10 @@ def apply_DPS_for_deblurring(
 
     # setup data and kernel
     sample = {
-        "H": adapt_image_dps_pigdm(clean_image).to(device),
-        "L": adapt_image_dps_pigdm(degraded_image).to(device),
-        "kernel": adapt_kernel_dps_pigdm(kernel).to(device),
+        "H": clean_image.to(device),
+        "L": degraded_image.to(device),
+        "kernel": kernel.to(device),
+        "sigma": config.noise_level_img,
     }
 
     if logger is not None: # debug logs
@@ -153,11 +156,11 @@ def apply_DPS_for_deblurring(
 
     # log informations
     if logger is not None:
-        logger.info(f"timesteps: {config.timesteps}")
-        logger.info(f"device: {device}")
-        logger.info(f"Clean image: {clean_image_filename}")
-        logger.info(f"Degraded image: {degraded_image_filename}")
-        logger.info(f"Kernel: {kernel_filename}")
+        logger.info(f"- device: {device}")
+        logger.info(f"- timesteps: {config.timesteps}")
+        logger.info(f"* clean image: {clean_image_filename}")
+        logger.info(f"* degraded image: {degraded_image_filename}")
+        logger.info(f"* kernel: {kernel_filename}")
 
     # Forward model (cuda GPU implementation)
     # forward_model = lambda x: agem.fft_blur(x, sample['kernel'].to(device))
@@ -186,21 +189,13 @@ def apply_DPS_for_deblurring(
 
     clean_image = utils_image.tensor2uint(x)
     degraded_image = utils_image.tensor2uint(y)
-    restored_image = utils_image.tensor2uint(res)
+    restored_image = utils_image.tensor2uint(res.to(device))
 
-    # plt.figure(figsize=(10, 10/3))
-    # plt.subplot(131)
-    # plt.imshow(util.tensor2uint(y))
-    # plt.axis('off')
-    # plt.subplot(132)
-    # plt.imshow(util.tensor2uint(res))
-    # plt.axis('off')
-    # plt.subplot(133)
-    # plt.imshow(util.tensor2uint(x))
-    # plt.axis('off')
-    # plt.show()
+    # print(get_infos_img(clean_image))
+    # print(get_infos_img(degraded_image))
+    # print(get_infos_img(restored_image))
 
-    psnr = utils_image.calculate_psnr(utils_image.tensor2uint(res), utils_image.tensor2uint(sample['H']))
+    psnr = utils_image.calculate_psnr(restored_image, clean_image)
 
     metrics = {"psnr": psnr}
 
