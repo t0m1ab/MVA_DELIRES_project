@@ -12,6 +12,7 @@ delires/results/
 delires/models/
 
 delires/data/ffhq/
+delires/sandbox/
 
 **/notes.txt
 **/sandbox.py
