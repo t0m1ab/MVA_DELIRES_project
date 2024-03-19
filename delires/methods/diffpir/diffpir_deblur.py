@@ -1,39 +1,20 @@
 import os.path
 from pathlib import Path
 from logging import Logger
-import cv2
-import logging
 from tqdm import tqdm
-from dataclasses import dataclass
+import cv2
 
 import numpy as np
 import torch
 import torch.nn.functional as F
 from datetime import datetime
-from collections import OrderedDict
 
-from delires.utils.utils_image import get_infos_img
 from delires.methods.diffpir.diffpir_configs import DiffPIRDeblurConfig
 from delires.methods.diffpir.utils import utils_model
-from delires.methods.diffpir.utils import utils_logger
 from delires.methods.diffpir.utils import utils_sisr as sr
 from delires.methods.diffpir.utils import utils_image as util
-from delires.methods.diffpir.utils.delires_utils import (
-    plot_sequence, 
-    create_blur_kernel, 
-    create_blurred_and_noised_image, 
-    manually_build_image_path,
-)
 from delires.methods.diffpir.guided_diffusion.unet import UNetModel
 from delires.methods.diffpir.guided_diffusion.respace import SpacedDiffusion
-
-# from guided_diffusion import dist_util
-from delires.methods.diffpir.guided_diffusion.script_util import (
-    NUM_CLASSES,
-    model_and_diffusion_defaults,
-    create_model_and_diffusion,
-    args_to_dict,
-)
 
 from delires.params import (
     MODELS_PATH,
@@ -65,7 +46,7 @@ def apply_DiffPIR_for_deblurring(
         kernel_filename: str,
         clean_image: torch.Tensor,
         degraded_image: torch.Tensor,
-        kernel: torch.Tensor,
+        kernel: np.ndarray,
         model: UNetModel,
         diffusion: SpacedDiffusion,
         img_ext: str = "png",
@@ -82,7 +63,7 @@ def apply_DiffPIR_for_deblurring(
         - kernel_filename: the name of the kernel (without extension, ex: "my_kernel")
         - clean_image: the clean image as a float32 torch.Tensor of shape (1,C,W,H)
         - degraded_image: the degraded image as a float32 torch.Tensor of shape (1,C,W,H)
-        - kernel: the blur kernel (see delires.utils.delires_utils.create_blur_kernel() for more details)
+        - kernel: the blur kernel as a float32 numpy array of shape (1,1,W,H) or (1,W,H) or (W,H)
         - model: the UNetModel object
         - diffusion: the SpacedDiffusion object
         - img_ext: the extension of the image (ex: "png")
@@ -99,7 +80,7 @@ def apply_DiffPIR_for_deblurring(
     """
 
     # transform data to match the code of the authors
-    kernel = kernel.squeeze()
+    kernel = torch.tensor(kernel, dtype=torch.float32).squeeze()
     clean_image = clean_image.squeeze().permute((1, 2, 0)).numpy()
     degraded_image = degraded_image.squeeze().permute((1, 2, 0)).numpy()
 
@@ -427,32 +408,34 @@ def apply_DiffPIR_for_deblurring(
 
 def main():
 
-    img = "69037" # image name without extension in the test location described in the configuration
+    pass
 
-    config = DiffPIRDeblurConfig()
+    # img = "69037" # image name without extension in the test location described in the configuration
 
-    # Create the blur kernel
-    k, k_4d = create_blur_kernel(
-        use_DIY_kernel=config.use_DIY_kernel,
-        blur_mode=config.blur_mode,
-        kernel_size=config.kernel_size,
-        seed=config.seed,
-        cwd=config.cwd,
-    )
+    # config = DiffPIRDeblurConfig()
 
-    # Build path to the image <img>
-    img_path = manually_build_image_path(img, config.testset_name, config.cwd)
-    # print(f"Image path: {img_path}")
+    # # Create the blur kernel
+    # k, k_4d = create_blur_kernel(
+    #     use_DIY_kernel=config.use_DIY_kernel,
+    #     blur_mode=config.blur_mode,
+    #     kernel_size=config.kernel_size,
+    #     seed=config.seed,
+    #     cwd=config.cwd,
+    # )
 
-    # Create the degraded image
-    img_L, img_H, img_name, img_ext = create_blurred_and_noised_image(
-        kernel=k, 
-        img=img_path,
-        n_channels=config.n_channels,
-        noise_level_img=config.noise_level_img,
-    )
+    # # Build path to the image <img>
+    # img_path = manually_build_image_path(img, config.testset_name, config.cwd)
+    # # print(f"Image path: {img_path}")
 
-    # <method_apply_DiffPIR_for_deblurring> must be used in a Diffuser apply method
+    # # Create the degraded image
+    # img_L, img_H, img_name, img_ext = create_blurred_and_noised_image(
+    #     kernel=k, 
+    #     img=img_path,
+    #     n_channels=config.n_channels,
+    #     noise_level_img=config.noise_level_img,
+    # )
+
+    # # <method_apply_DiffPIR_for_deblurring> must be used in a Diffuser apply method
 
 
 if __name__ == '__main__':

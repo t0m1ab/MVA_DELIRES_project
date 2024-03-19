@@ -11,19 +11,13 @@ class DPSConfig:
 @dataclass
 class DPSDeblurConfig(DPSConfig):
     timesteps: int             = 100              # number of timesteps for scheduler
-    noise_level_img: float     = 12.75/255.0      # set AWGN noise level for LR image, default: 0
-    # iter_num: int              = 10               # set number of iterations
-    # ddim_sample: bool          = False            # sampling method
-    # lambda_: float             = 1.0    
+    noise_level_img: float     = 12.75/255.0      # set AWGN noise level for LR image, default: 0 
 
 
 @dataclass
 class DPSInpaintingConfig(DPSConfig):
     timesteps: int             = 100              # number of timesteps for scheduler
-    noise_level_img: float     = 12.75/255.0      # set AWGN noise level for LR image, default: 0
-    # iter_num: int              = 10               # set number of iterations
-    # ddim_sample: bool          = False            # sampling method
-    # lambda_: float             = 1.0    
+    noise_level_img: float     = 12.75/255.0      # set AWGN noise level for LR image, default: 0  
 
 
 @dataclass

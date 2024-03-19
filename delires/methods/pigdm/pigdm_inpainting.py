@@ -7,13 +7,12 @@ from diffusers import DDPMScheduler, UNet2DModel
 
 from delires.utils.utils_image import get_infos_img
 import delires.methods.utils.utils_agem as utils_agem
-import delires.methods.utils.utils_image as utils_image
+import delires.utils.utils_image as utils_image
 from delires.methods.utils.utils import adapt_mask_dps_pigdm
 from delires.methods.pigdm.pigdm_configs import PiGDMConfig, PiGDMInpaintingConfig
 from delires.methods.pigdm.pigdm_sampling import pigdm_sampling
 
 from delires.params import RESTORED_DATA_PATH
-
 
 
 def apply_PiGDM_for_inpainting(

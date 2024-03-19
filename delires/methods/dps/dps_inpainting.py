@@ -5,7 +5,7 @@ from diffusers import DDPMPipeline, DDPMScheduler, UNet2DModel
 
 from delires.utils.utils_image import get_infos_img
 import delires.methods.utils.utils_agem as utils_agem
-import delires.methods.utils.utils_image as utils_image
+import delires.utils.utils_image as utils_image
 from delires.methods.utils.utils import adapt_mask_dps_pigdm
 from delires.methods.dps.dps_configs import DPSConfig, DPSInpaintingConfig
 from delires.methods.diffpir.guided_diffusion.unet import UNetModel

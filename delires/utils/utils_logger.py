@@ -29,9 +29,10 @@ def logger_info(logger_name, log_path='default_logger.log'):
     '''
     log = logging.getLogger(logger_name)
     if log.hasHandlers():
-        print('LogHandlers exists!')
+        # print('LogHandlers exists!')
+        pass
     else:
-        print('LogHandlers setup!')
+        # print('LogHandlers setup!')
         level = logging.INFO
         formatter = logging.Formatter('%(asctime)s : %(message)s', datefmt='%H:%M:%S')
         fh = logging.FileHandler(log_path, mode='a')

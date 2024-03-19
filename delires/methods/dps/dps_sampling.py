@@ -10,7 +10,6 @@ from delires.methods.diffpir.guided_diffusion.unet import UNetModel
 import delires.methods.utils.utils_agem as utils_agem
 
 
-
 def dps_sampling(
         model: UNet2DModel | UNetModel, 
         scheduler: DDPMScheduler, 
@@ -20,7 +19,7 @@ def dps_sampling(
         scale_guidance: int = 1,
         device: str = "cpu",
         logger: Logger = None,
-    ):
+    ) -> torch.Tensor:
     """
     DPS with DDPM and intrinsic scale
     """
@@ -29,9 +28,6 @@ def dps_sampling(
     # Init random noise
     x_T = torch.randn((1, 3, sample_size, sample_size)).to(device)
     x_t = x_T
-
-    # plot_sequence(np.array(sigmas.cpu()), path=RESTORED_DATA_PATH, title="sigmas.png")
-    # plot_sequence(scheduler.timesteps, path=RESTORED_DATA_PATH, title="timesteps.png")
 
     for t in tqdm(scheduler.timesteps, desc="DPS sampling"):
 

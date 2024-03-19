@@ -1,18 +1,17 @@
 from typing import Callable
-import torch
 from tqdm import tqdm
 from logging import Logger
+import torch
 
 from diffusers import DDPMScheduler, UNet2DModel
-from delires.methods.pigdm.pigdm_configs import PiGDMInpaintingConfig
+from delires.methods.pigdm.pigdm_configs import PiGDMDeblurConfig, PiGDMInpaintingConfig
 from delires.methods.diffpir.guided_diffusion.unet import UNetModel
 import delires.methods.utils.utils_agem as utils_agem
 from delires.utils.utils_image import get_infos_img
 
 
-
 def pigdm_sampling(
-        config: PiGDMInpaintingConfig,
+        config: PiGDMDeblurConfig | PiGDMInpaintingConfig,
         model: UNet2DModel | UNetModel, 
         scheduler: DDPMScheduler, 
         y: torch.Tensor, 
@@ -20,16 +19,21 @@ def pigdm_sampling(
         scale: int = 1, 
         device: str = "cpu",
         logger: Logger = None,
-    ):
+    ) -> torch.Tensor:
     """
     PiGDM with DDPM and intrinsic scale
     """
     sample_size = y.shape[-1]
     step_size = scheduler.config.num_train_timesteps // scheduler.num_inference_steps
 
+    print("STEP SIZE", step_size, config.timesteps)
+    print(scheduler.config.num_train_timesteps)
+    print(scheduler.num_inference_steps)
+    print(scheduler.timesteps)
+
     input = torch.randn((1, 3, sample_size, sample_size)).to(device)
 
-    for t in tqdm(scheduler.timesteps):
+    for t in tqdm(scheduler.timesteps, desc="PiGDM sampling"):
         # Computation of some hyper-params
         prev_t = t - step_size
         variance = scheduler._get_variance(t, prev_t)
