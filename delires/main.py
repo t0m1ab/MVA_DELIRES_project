@@ -31,6 +31,7 @@ def run_experiment(
     degraded_dataset_name: str,
     diffuser_config: DIFFUSER_CONFIG,
     diffuser_task_config: TASK_CONFIG,
+    dataset_subset: int = None,
     nb_gen: int = 1,
     fid_dims: int = 2048,
     fid_kept_eigenvectors: int|None = None,
@@ -39,6 +40,7 @@ def run_experiment(
     Run an experiment for a given method.
     
     Arguments:
+        - dataset_subset: Only the dataset_subset first images of the dataset are used for the experiment. If None, the whole dataset is used.
         - fid_dims: number of features of the layer of InceptionV3 chosen for the computation of FID. This impacts the interpretability of the measure as well as its scale.
         - fid_kept_eigenvectors: Number of eigenvectors to keep for the covariance matrix of the features of InceptionV3 retained for the computation of FID. Use this if the number of images in the dataset is not sufficient.
     """
@@ -47,10 +49,9 @@ def run_experiment(
     experiment_path = os.path.join(RESTORED_DATA_PATH, exp_name)
     Path(experiment_path).mkdir(parents=True, exist_ok=True)
         
-    # Save configs
+    # save configs
     utils.archive_kwargs(diffuser_config.__dict__, os.path.join(RESTORED_DATA_PATH, exp_name, "diffuser_config.json"))
     utils.archive_kwargs(diffuser_task_config.__dict__, os.path.join(RESTORED_DATA_PATH, exp_name, "diffuser_task_config.json"))
-
       
     # setup device
     device = torch.device("cpu")
@@ -93,19 +94,19 @@ def run_experiment(
         "coverage": {},  # TODO
         "LPIPS": {},  # computed on-the-run
         }
-    for i, img_name in enumerate(dataset_infos["images"]):
+    images = dataset_infos["images"][:dataset_subset] if dataset_subset is not None else dataset_infos["images"]
+    for i, img_name in enumerate(images):
         mask_index = None
         img_mse_to_clean = []
         img_mse_to_degraded = []
         img_coverage = []
-        img_lpips = []
+        # img_lpips = []
         
         gen_images = []
         
         clean_image = utils_image.imread_uint(os.path.join(CLEAN_DATA_PATH, img_name+".png"))
 
         for gen_idx in range(nb_gen):
-
             # apply the method (don't save the image in apply_task by default because there are multiple generations to save)
             if task == "deblur":
                 restored_image, metrics = diffuser.apply_debluring(
@@ -128,7 +129,7 @@ def run_experiment(
                     mask_index=mask_index,
                 )
             else:
-                raise NotImplementedError
+                raise NotImplementedError("The given task is not implemented.")
 
             # save the restored image (with "_genX" suffix where X is the generation index)
             diffuser.save_restored_image(
@@ -141,8 +142,8 @@ def run_experiment(
             img_mse_to_clean.append(utils_image.mse(restored_image, clean_image))
             img_mse_to_degraded.append(data_consistency_mse(degraded_dataset_name, img_name, restored_image, task, operator_name, mask_index))
             img_coverage.append(0)
-            if diffuser_task_config.calc_LPIPS:
-                img_lpips.append(metrics["lpips"])
+            # if diffuser_task_config.calc_LPIPS:
+                # img_lpips.append(metrics["lpips"])
             
             # Append generated image to compute std image
             gen_images.append(restored_image)
@@ -155,36 +156,83 @@ def run_experiment(
         exp_raw_metrics["MSE_to_degraded"][img_name] = img_mse_to_degraded
         exp_raw_metrics["average_image_std"][img_name] = [np.mean(std_image)]
         exp_raw_metrics["coverage"][img_name] = img_coverage
-        if diffuser_task_config.calc_LPIPS:
-            exp_raw_metrics["LPIPS"][img_name] = list(img_lpips)
+        # if diffuser_task_config.calc_LPIPS:
+            # exp_raw_metrics["LPIPS"][img_name] = list(img_lpips)
         
     # Save metrics once before computing FID
     np.savez(os.path.join(RESTORED_DATA_PATH, exp_name, "metrics.npz"), **exp_raw_metrics)
     
     # Compute FID and save metrics
-    fid = fid_score.calculate_fid_given_paths(paths=[CLEAN_DATA_PATH, os.path.join(RESTORED_DATA_PATH, exp_name)], batch_size=5, device=device, dims=fid_dims, keep_eigen=fid_kept_eigenvectors)
+    fid = fid_score.calculate_fid_given_paths(paths=[CLEAN_DATA_PATH, os.path.join(RESTORED_DATA_PATH, exp_name)], batch_size=nb_gen, device=device, dims=fid_dims, keep_eigen=fid_kept_eigenvectors)
     np.savez(os.path.join(RESTORED_DATA_PATH, exp_name, "metrics.npz"), **exp_raw_metrics, fid=fid)
     
-    report_metrics(exp_raw_metrics, fid, os.path.join(RESTORED_DATA_PATH, exp_name, "metrics.csv"), diffuser_task_config.calc_LPIPS)        
+    report_metrics(exp_raw_metrics, fid, os.path.join(RESTORED_DATA_PATH, exp_name, "metrics.csv"), calc_LPIPS=False)        
+    
+
+def run_all_experiments():
+    tasks = ["deblur", "inpaint"]
+    diffusers = ["diffpir", "dps", "pigdm"]
+    diffuser_configs = {"diffpir": DiffPIRConfig(), "dps": DPSConfig(), "pigdm": PiGDMConfig()}
+    task_configs = {
+        "deblur": {"diffpir": DiffPIRDeblurConfig(), "dps": DPSDeblurConfig(), "pigdm": PiGDMDeblurConfig()},
+        "inpaint": {"diffpir": DiffPIRInpaintingConfig(), "dps": DPSInpaintingConfig(), "pigdm": PiGDMInpaintingConfig()}
+    }
+    for task in tasks:
+        for diffuser in diffusers:
+            exp_name = f"test_exp_{diffuser}_{task}"
+            degraded_dataset_name = "blurred_ffhq" if task == "deblur" else "masked_ffhq"
+            run_experiment(
+                exp_name=exp_name,
+                diffuser_type=diffuser,
+                task=task,
+                degraded_dataset_name=degraded_dataset_name,
+                diffuser_config=diffuser_configs[diffuser],
+                diffuser_task_config=task_configs[task][diffuser],
+                dataset_subset = 2,
+                nb_gen=1,
+                fid_dims=192,
+                fid_kept_eigenvectors=157,
+            )
+            
+    # New experiments for assessment of generation variability
+    nb_gen = 2
+    for task in tasks:
+        for diffuser in diffusers:
+            exp_name = f"test_exp_{diffuser}_{task}_std"
+            degraded_dataset_name = "blurred_ffhq" if task == "deblur" else "masked_ffhq"
+            run_experiment(
+                exp_name=exp_name,
+                diffuser_type=diffuser,
+                task=task,
+                degraded_dataset_name=degraded_dataset_name,
+                diffuser_config=diffuser_configs[diffuser],
+                diffuser_task_config=task_configs[task][diffuser],
+                dataset_subset = 1,
+                nb_gen=nb_gen,
+                fid_dims=192,
+                fid_kept_eigenvectors=157,
+            )
+    
+    
 
 
 def main():
     
-    # Deblurring
-    exp_name = "test_exp_diffpir_deblur"
-    degraded_dataset_name = "blurred_dataset"
+    # # Deblurring
+    # exp_name = "test_exp_diffpir_deblur"
+    # degraded_dataset_name = "blurred_dataset"
     
-    run_experiment(
-        exp_name=exp_name,
-        diffuser_type="diffpir",
-        task="deblur",
-        degraded_dataset_name=degraded_dataset_name,
-        diffuser_config=DiffPIRConfig(),
-        diffuser_task_config=DiffPIRDeblurConfig(),
-        nb_gen=2,
-        fid_dims=192,
-        fid_kept_eigenvectors=157,
-    )
+    # run_experiment(
+    #     exp_name=exp_name,
+    #     diffuser_type="diffpir",
+    #     task="deblur",
+    #     degraded_dataset_name=degraded_dataset_name,
+    #     diffuser_config=DiffPIRConfig(),
+    #     diffuser_task_config=DiffPIRDeblurConfig(),
+    #     nb_gen=2,
+    #     fid_dims=192,
+    #     fid_kept_eigenvectors=157,
+    # )
     
     # # Inpainting
     # exp_name = "test_exp_diffpir_inpaint"
@@ -201,6 +249,8 @@ def main():
     #     fid_dims=192,
     #     fid_kept_eigenvectors=157,
     # )
+    
+    run_all_experiments()
 
 
 if __name__ == "__main__":

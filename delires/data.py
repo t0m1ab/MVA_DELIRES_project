@@ -136,7 +136,7 @@ def generate_degraded_dataset_blurred(
     degraded_dataset_path = os.path.join(DEGRADED_DATA_PATH, degraded_dataset_name)
     
     # Load clean dataset
-    clean_dataset = os.listdir(clean_dataset_path)
+    clean_dataset = sorted(os.listdir(clean_dataset_path))
     os.makedirs(degraded_dataset_path, exist_ok=True)
     kwargs = {
         "degraded_dataset_name": degraded_dataset_name,
@@ -251,7 +251,7 @@ def generate_degraded_dataset_downsampled(
     degraded_dataset_path = os.path.join(DEGRADED_DATA_PATH, degraded_dataset_name)
     
     # Load clean dataset
-    clean_dataset = os.listdir(clean_dataset_path)
+    clean_dataset = sorted(os.listdir(clean_dataset_path))
     os.makedirs(degraded_dataset_path, exist_ok=True)
     kwargs = {
         "degraded_dataset_name": degraded_dataset_name,
@@ -432,7 +432,7 @@ def main():
     # masks = create_inpainting_masks(
     #     mask_type = "box",
     #     mask_len_range = [96, 128],
-    #     mask_prob_range = [0.5, 0.5],
+    #     mask_prob_range = None,
     #     image_shape = (256, 256),
     #     n_channels = 3,
     #     margin = (16, 16),
@@ -441,7 +441,7 @@ def main():
     #     seed = seed
     #     )
     # # masks = load_masks(masks_name)
-    # generate_degraded_dataset_masked("masked_dataset", masks, masks_name, 3, noise_level_img, seed, False)
+    # generate_degraded_dataset_masked("masked_ffhq", masks, masks_name, 3, noise_level_img, seed, False)
 
 if __name__ == "__main__":
     main()
