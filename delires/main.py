@@ -159,8 +159,8 @@ def run_experiment(
         # if diffuser_task_config.calc_LPIPS:
             # exp_raw_metrics["LPIPS"][img_name] = list(img_lpips)
         
-    # Save metrics once before computing FID
-    np.savez(os.path.join(RESTORED_DATA_PATH, exp_name, "metrics.npz"), **exp_raw_metrics)
+        # Save metrics as a checkpoint after processing one image
+        np.savez(os.path.join(RESTORED_DATA_PATH, exp_name, "metrics.npz"), **exp_raw_metrics)
     
     # Compute FID and save metrics
     fid = fid_score.calculate_fid_given_paths(paths=[CLEAN_DATA_PATH, os.path.join(RESTORED_DATA_PATH, exp_name)], batch_size=nb_gen, device=device, dims=fid_dims, keep_eigen=fid_kept_eigenvectors)
