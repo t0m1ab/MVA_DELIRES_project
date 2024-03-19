@@ -5,6 +5,7 @@ import torch
 from logging import Logger
 
 from delires.data import load_downsample_kernel, load_blur_kernel
+import delires.methods.utils as methods_utils
 from delires.methods.diffuser import Diffuser
 from delires.methods.diffpir.diffpir_configs import DiffPIRConfig, DiffPIRDeblurConfig, DiffPIRInpaintingConfig
 from delires.methods.diffpir.utils import utils_image
@@ -42,27 +43,14 @@ class DiffPIRDiffuser(Diffuser):
 
         # Deblurring
         self.kernel_filename: str = None
-        self.kernel: np.ndarray = None
+        self.kernel: torch.Tensor = None
         
         # Inpainting
         self.masks_filename: str = None
         self.mask_idx: int = 0
         self.mask: np.ndarray = None
-
-
-    def load_downsample_kernel(
-        self,
-        k_index: int = 0,
-        cwd: str = "",
-        ):
-        self.kernel = load_downsample_kernel(self.classical_degradation, self.sf, k_index, cwd)
-        
-    def load_blur_kernel(self, kernel_filename: str|None = None):
-        """ Load a blur kernel from a file or from a given kernel filename (name without extension). """
-        self.kernel = load_blur_kernel(kernel_filename)
-        self.kernel_filename = kernel_filename
     
-    def load_model(self, config: DiffPIRConfig) -> None:
+    def load_model(self, config: DiffPIRConfig, scheduler_config: None = None) -> None:
         """ Load the model and diffusion objects from the given config. """
 
         model_path = os.path.join(MODELS_PATH, f"{config.model_name}.pt")
@@ -89,20 +77,6 @@ class DiffPIRDiffuser(Diffuser):
         self.model = model
         self.diffusion = diffusion
 
-    def save_restored_image(
-            self, 
-            restored_image: np.ndarray, 
-            restored_image_filename: str,
-            path: str = None,
-            img_ext: str = "png",
-        ):
-        path = path if path is not None else RESTORED_DATA_PATH
-        Path(path).mkdir(parents=True, exist_ok=True)
-        restored_image_path = os.path.join(path, f"{restored_image_filename}.{img_ext}")
-        utils_image.imsave(restored_image, restored_image_path)
-        if self.logger is not None:
-            self.logger.info(f"Restored image saved in: {restored_image_path}")
-        
     def apply_debluring(
             self,
             config: DiffPIRDeblurConfig,
@@ -111,6 +85,7 @@ class DiffPIRDiffuser(Diffuser):
             degraded_dataset_name: str = None,
             experiment_name: str = None,
             kernel_filename: str = None,
+            use_png_data: bool = False,
             img_ext: str = "png",
             save: bool = False,
         ) -> tuple[np.ndarray, dict[str, float]]:
@@ -124,6 +99,7 @@ class DiffPIRDiffuser(Diffuser):
             - degraded_dataset_name: name of the degraded dataset (potential subfolder in DEGRADED_DATA_PATH).
             - experiment_name: name of the experiment (potential subfolder in RESTORED_DATA_PATH). If None, then save directly in RESTORED_DATA_PATH.
             - kernel_filename: name of the kernel (without extension). If None, then try to use self.kernel and self.kernel_filename.
+            - use_png_data: if True, the degraded image will be loaded from PNG file (=> uint values => [0,1] clipping) otherwise from npy file (=> float values can be unclipped).
             - img_ext: extension of the images (default: "png").
             - save: if True, the restored image will be saved in the RESTORED_DATA_PATH/<experiment_name> folder.
         
@@ -135,22 +111,19 @@ class DiffPIRDiffuser(Diffuser):
         if self.model is None or self.diffusion is None:
             raise ValueError("The model and diffusion objects must be loaded before applying deblurring.")
 
-        # load images
-        degraded_dataset_name = degraded_dataset_name if degraded_dataset_name is not None else ""
-        clean_image_png_path = os.path.join(CLEAN_DATA_PATH, f"{clean_image_filename}.{img_ext}")
-        degraded_image_np_path = os.path.join(DEGRADED_DATA_PATH, degraded_dataset_name, f"{degraded_image_filename}.npy")
-
-        clean_image = utils_image.imread_uint(clean_image_png_path)
-        degraded_image = np.load(degraded_image_np_path)
-
-        # load kernel if necessary (otherwise use self.kernel and self.kernel_filename)
-        if kernel_filename is not None:
-            self.load_blur_kernel(kernel_filename)
-
-        if self.kernel is None or self.kernel_filename is None:
-            raise ValueError("The blur kernel must be loaded before applying deblurring.")
+        # load images (and kernel if specified)        
+        clean_image, degraded_image = self.load_data(
+            degraded_dataset_name=degraded_dataset_name if degraded_dataset_name is not None else "",
+            clean_image_filename=clean_image_filename,
+            degraded_image_filename=degraded_image_filename,
+            kernel_filename=kernel_filename,
+            use_png_data=use_png_data,
+            img_ext=img_ext,
+        )
 
         # apply DiffPIR deblurring
+        self.log_banner("DiffPIR Deblurring")
+        self.logger.info(f"- model_name: {self.config.model_name}")
         restored_image, metrics = apply_DiffPIR_for_deblurring(
             config=config,
             clean_image_filename=clean_image_filename,
@@ -175,7 +148,7 @@ class DiffPIRDiffuser(Diffuser):
                 img_ext=img_ext,
             )
 
-        self.logger.info(50*"-") # separate logs between different images
+        self.log_banner("------------------") # separate logs between different images
 
         return restored_image, metrics
     
@@ -277,38 +250,36 @@ def main():
         device = torch.device("cuda")
         torch.cuda.empty_cache()
 
-
-    # quick demo of the DiffPIR deblurring
+    ### DEMO DiffPIR deblurring
 
     diffpir_config = DiffPIRConfig()
     diffpir_diffuser = DiffPIRDiffuser(diffpir_config, autolog="diffpir_debluring_test", device=device)
 
-    diffpir_diffuser.load_blur_kernel("gaussian_kernel_05")
-    # diffpir_diffuser.load_blur_kernel("motion_kernel_1")
+    # diffpir_diffuser.load_blur_kernel("gaussian_kernel_05")
+    diffpir_diffuser.load_blur_kernel("motion_kernel_example")
 
     diffpir_deblur_config = DiffPIRDeblurConfig()
-    img_name = "0"
+    img_name = "1"
     _ = diffpir_diffuser.apply_debluring(
         config=diffpir_deblur_config,
         clean_image_filename=img_name,
         degraded_image_filename=img_name,
-        degraded_dataset_name="blurred_ffhq",
-        kernel_filename="gaussian_kernel_05",
-        save=True, # we save the image on the fly for the demo
+        degraded_dataset_name="blurred_ffhq_test20",
+        # kernel_filename="gaussian_kernel_05",
+        save=True,
     )
     
-    
-    # # quick demo of the DiffPIR inpainting
+    ### DEMO DiffPIR inpainting
 
     # diffpir_config = DiffPIRConfig()
     # diffpir_diffuser = DiffPIRDiffuser(diffpir_config, autolog="diffpir_inpainting_test", device=device)
 
-    # masks_name = "box_masks"
+    # masks_name = "random_masks"
     # mask_index = 0
     # diffpir_diffuser.load_mask(masks_name, mask_index)    
 
     # diffpir_inpaint_config = DiffPIRInpaintingConfig()
-    # img_name = "0"
+    # img_name = "69037"
     # _ = diffpir_diffuser.apply_inpainting(
     #     config=diffpir_inpaint_config,
     #     clean_image_filename=img_name,

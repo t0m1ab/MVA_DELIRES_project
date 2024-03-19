@@ -17,12 +17,6 @@ def adapt_mask_dps_pigdm(mask: np.ndarray) -> torch.Tensor:
     return torch.tensor(mask_with_batch_dims, dtype=torch.float32)
 
 
-def adapt_image_dps_pigdm(img: np.ndarray) -> torch.Tensor:
-    """ Convert uint8 image to float32 tensor with batch channel, transpose dims and set values in range [0,1] """
-    img_with_batch_dim = np.expand_dims(np.transpose(img, (2, 0, 1)), axis=0) / 255.
-    return torch.tensor(img_with_batch_dim, dtype=torch.float32)
-
-
 def alpha_beta(scheduler: DDPMScheduler, t: int) -> tuple[float, float]:
     """ Compute alpha_t and beta_t for a given timestep t. """
     prev_t = scheduler.previous_timestep(t)

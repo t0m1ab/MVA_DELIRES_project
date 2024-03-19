@@ -2,16 +2,17 @@
 .venv/*
 **/__pycache__/
 
+delires/data/degraded_data/
+delires/data/ffhq/
+delires/data/clean_data_diffpir/
+
+delires/results/
+delires/models/
+delires/sandbox/
+
 delires/methods/diffpir/figs/
 delires/methods/diffpir/model_zoo/
 delires/methods/diffpir/results/
-
-delires/data/degraded_datasets
-delires/data/clean_images_others
-delires/results/
-delires/models/
-
-delires/data/ffhq/
 
 **/notes.txt
 **/sandbox.py

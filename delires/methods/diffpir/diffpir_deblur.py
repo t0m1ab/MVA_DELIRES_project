@@ -12,6 +12,7 @@ import torch.nn.functional as F
 from datetime import datetime
 from collections import OrderedDict
 
+from delires.utils.utils_image import get_infos_img
 from delires.methods.diffpir.diffpir_configs import DiffPIRDeblurConfig
 from delires.methods.diffpir.utils import utils_model
 from delires.methods.diffpir.utils import utils_logger
@@ -62,9 +63,9 @@ def apply_DiffPIR_for_deblurring(
         clean_image_filename: str,
         degraded_image_filename: str,
         kernel_filename: str,
-        clean_image: np.ndarray,
-        degraded_image: np.ndarray,
-        kernel: np.ndarray,
+        clean_image: torch.Tensor,
+        degraded_image: torch.Tensor,
+        kernel: torch.Tensor,
         model: UNetModel,
         diffusion: SpacedDiffusion,
         img_ext: str = "png",
@@ -79,8 +80,8 @@ def apply_DiffPIR_for_deblurring(
         - clean_image_filename: the name of the clean image (without extension, ex: "my_clean_image")
         - degraded_image_filename: the name of the degraded image (without extension, ex: "my_degraded_image")
         - kernel_filename: the name of the kernel (without extension, ex: "my_kernel")
-        - clean_image: the clean image as a numpy array
-        - degraded_image: the degraded image as a numpy array
+        - clean_image: the clean image as a float32 torch.Tensor of shape (1,C,W,H)
+        - degraded_image: the degraded image as a float32 torch.Tensor of shape (1,C,W,H)
         - kernel: the blur kernel (see delires.utils.delires_utils.create_blur_kernel() for more details)
         - model: the UNetModel object
         - diffusion: the SpacedDiffusion object
@@ -97,11 +98,16 @@ def apply_DiffPIR_for_deblurring(
     Define the configuration, the logger and the device to be used.
     """
 
+    # transform data to match the code of the authors
+    kernel = kernel.squeeze()
+    clean_image = clean_image.squeeze().permute((1, 2, 0)).numpy()
+    degraded_image = degraded_image.squeeze().permute((1, 2, 0)).numpy()
+
     if config.calc_LPIPS:
         import lpips
         loss_fn_vgg = lpips.LPIPS(net='vgg').to(device)
     # load the kernel tensor 4D
-    k_4d = torch.einsum('ab,cd->abcd', torch.eye(3).to(device), torch.from_numpy(kernel).to(device))
+    k_4d = torch.einsum('ab,cd->abcd', torch.eye(3).to(device), kernel.to(device))
 
     # setup logger
     # result_name = build_result_name(degraded_image_filename, config)
@@ -109,7 +115,7 @@ def apply_DiffPIR_for_deblurring(
     # utils_logger.logger_info(logger_name, log_path=os.path.join(RESTORED_DATA_PATH, f"{logger_name}.log"))
     # logger = logging.getLogger(logger_name)
     if logger is not None:
-        logger.info(f"Using device {device}")
+        logger.info(f"- device {device}")
 
 
     ### 2 - NOISE SCHEDULE
@@ -158,13 +164,14 @@ def apply_DiffPIR_for_deblurring(
     """
 
     if logger is not None:
-        logger.info(f"model_name: {config.model_name} | image sigma: {config.noise_level_img} | model sigma: {noise_level_model}")
-        logger.info(f"eta: {config.eta} | zeta: {config.zeta} | lambda: {config.lambda_} | guidance_scale: {config.guidance_scale}")
-        logger.info(f"start step: {t_start} | skip_type: {config.skip_type} | skip interval: {skip} | skipstep analytic steps: {noise_model_t}")
-        logger.info(f"use_DIY_kernel: {config.use_DIY_kernel} | blur mode: {config.blur_mode}")
-        logger.info(f"Clean image: {clean_image_filename}")
-        logger.info(f"Degraded image: {degraded_image_filename}")
-        logger.info(f"Kernel: {kernel_filename}")
+        logger.info(f"- timesteps: {config.iter_num}")
+        logger.info(f"- image sigma: {config.noise_level_img} | model sigma: {noise_level_model}")
+        logger.info(f"- eta: {config.eta} | zeta: {config.zeta} | lambda: {config.lambda_} | guidance_scale: {config.guidance_scale}")
+        logger.info(f"- start step: {t_start} | skip_type: {config.skip_type} | skip interval: {skip} | skipstep analytic steps: {noise_model_t}")
+        logger.info(f"- use_DIY_kernel: {config.use_DIY_kernel} | blur mode: {config.blur_mode}")
+        logger.info(f"* clean image: {clean_image_filename}")
+        logger.info(f"* degraded image: {degraded_image_filename}")
+        logger.info(f"* kernel: {kernel_filename}")
     
 
     ### 5 - SETUP ADAPTED VAR NAMES FOR THE RESTORATION LOGIC
@@ -381,10 +388,10 @@ def apply_DiffPIR_for_deblurring(
         lpips_score = lpips_score.cpu().detach().numpy()[0][0][0][0]
         metrics['lpips'] = lpips_score
         if logger is not None:
-            logger.info(f"{img_name:>10s} PSNR: {psnr:.4f}dB LPIPS: {lpips_score:.4f}")
+            logger.info(f"PSNR: {psnr:.4f}dB | LPIPS: {lpips_score:.4f}")
     else:
         if logger is not None:
-            logger.info(f"{img_name:>10s} PSNR: {psnr:.4f}dB")
+            logger.info(f"PSNR: {psnr:.4f}dB")
 
     if config.n_channels == 1:
         img_H = img_H.squeeze()

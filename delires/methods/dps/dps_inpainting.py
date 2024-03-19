@@ -1,11 +1,12 @@
 import numpy as np
 from logging import Logger
+import torch
 from diffusers import DDPMPipeline, DDPMScheduler, UNet2DModel
 
 from delires.utils.utils_image import get_infos_img
 import delires.methods.utils.utils_agem as utils_agem
 import delires.methods.utils.utils_image as utils_image
-from delires.methods.utils.utils import adapt_mask_dps_pigdm, adapt_image_dps_pigdm, alpha_beta
+from delires.methods.utils.utils import adapt_mask_dps_pigdm
 from delires.methods.dps.dps_configs import DPSConfig, DPSInpaintingConfig
 from delires.methods.diffpir.guided_diffusion.unet import UNetModel
 from delires.methods.diffpir.guided_diffusion.respace import SpacedDiffusion
@@ -21,8 +22,8 @@ def apply_DPS_for_inpainting(
         degraded_image_filename: str,
         masks_filename: str,
         mask_index: int,
-        clean_image: np.ndarray,
-        degraded_image: np.ndarray,
+        clean_image: torch.Tensor,
+        degraded_image: torch.Tensor,
         mask: np.ndarray,
         model: UNet2DModel,
         scheduler: DDPMScheduler,
@@ -34,7 +35,9 @@ def apply_DPS_for_inpainting(
     Apply DPS for inpainting to a given degraded image.
 
     ARGUMENTS:
-        [See delires.diffusers.diffpir.diffpir_inpainting.apply_DiffPIR_for_inpainting]
+        - clean_image: torch.Tensor float32 of shape (1,C,W,H) containing the clean image (with value clipping because loader from PNG).
+        - degraded_image: torch.Tensor float32 of shape (1,C,W,H) containing the degraded image (with or without value clipping).
+        - mask: np.ndarray mask.
 
     TIPS:
         - sample["mask"], sample["L"] and sample["H"] must be torch.Tensor with float values in [0,1]
@@ -52,9 +55,10 @@ def apply_DPS_for_inpainting(
 
     # setup data and mask
     sample = {
-        "H": adapt_image_dps_pigdm(clean_image).to(device),
-        "L": adapt_image_dps_pigdm(degraded_image).to(device),
+        "H": clean_image.to(device),
+        "L": degraded_image.to(device),
         "mask": adapt_mask_dps_pigdm(mask).to(device),
+        "sigma": config.noise_level_img,
     }
 
     if logger is not None: # debug logs

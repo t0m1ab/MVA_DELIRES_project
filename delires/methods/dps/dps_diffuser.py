@@ -6,21 +6,13 @@ import torch
 from diffusers import DDPMPipeline, DDPMScheduler, UNet2DModel
 
 from delires.data import load_downsample_kernel, load_blur_kernel
-from delires.utils.utils_logger import logger_info
-from delires.utils import utils_image
 from delires.methods.diffuser import Diffuser
 from delires.methods.dps.dps_configs import DPSConfig, DPSDeblurConfig, DPSSchedulerConfig, DPSInpaintingConfig
-from delires.methods.diffpir.utils import utils_model
+from delires.methods.diffpir.utils import utils_model, utils_image
 from delires.methods.dps.dps_deblur import apply_DPS_for_deblurring
 from delires.methods.dps.dps_inpainting import apply_DPS_for_inpainting
 from delires.methods.diffpir.guided_diffusion.unet import UNetModel
 from delires.methods.diffpir.guided_diffusion.respace import SpacedDiffusion
-
-from delires.methods.diffpir.guided_diffusion.script_util import (
-    model_and_diffusion_defaults,
-    create_model_and_diffusion,
-    args_to_dict,
-)
 
 from delires.params import (
     MODELS_PATH,
@@ -30,7 +22,7 @@ from delires.params import (
     RESTORED_DATA_PATH,
     DIFFPIR_NETWOKRS
 )
-# DDPMPipeline.from_pretrained(model_name)
+
 
 class DPSDiffuser(Diffuser):
 
@@ -41,7 +33,7 @@ class DPSDiffuser(Diffuser):
     
         self.model: UNet2DModel = None # torch.nn.Module object
         self.scheduler: DDPMScheduler = None # ddpmscheduler object
-        self.load_model(config) # load and store self.model and self.scheduler
+        self.load_model(config, scheduler_config=DPSSchedulerConfig) # load and store self.model and self.scheduler
 
         # SISR
         self.classical_degradation = getattr(config, "sisr_classical_degradation", False)
@@ -58,11 +50,6 @@ class DPSDiffuser(Diffuser):
         ):
         self.kernel = load_downsample_kernel(self.classical_degradation, self.sf, k_index, cwd)
         
-    def load_blur_kernel(self, kernel_filename: str|None = None):
-        """ Load a blur kernel from a file or from a given kernel filename (name without extension). """
-        self.kernel = load_blur_kernel(kernel_filename)
-        self.kernel_filename = kernel_filename
-    
     def load_mask(self, masks_filename: str, mask_index: int = 0):
         """ Load a mask from a file with a given mask set filename and given index within the selected masks set (name without extension). """
         masks = np.load(os.path.join(OPERATORS_PATH, f"{masks_filename}.npy"))
@@ -70,52 +57,6 @@ class DPSDiffuser(Diffuser):
         self.masks_filename = masks_filename
         self.mask_index = mask_index
     
-    def load_model(self, config: DPSConfig) -> None:
-        """ Load the model from the given config. """
-        
-        if config.model_name in DIFFPIR_NETWOKRS: # load UNetModel nn from diffpir code
-            model_path = os.path.join(MODELS_PATH, f"{config.model_name}.pt")
-            if config.model_name == DIFFPIR_NETWOKRS[0]: # diffusion_ffhq_10m
-                model_config = dict(
-                    model_path=model_path,
-                    num_channels=128,
-                    num_res_blocks=1,
-                    attention_resolutions="16",
-                )
-            elif config.model_name == DIFFPIR_NETWOKRS[1]: # 256x256_diffusion_uncond
-                model_config = dict(
-                    model_path=model_path,
-                    num_channels=256,
-                    num_res_blocks=2,
-                    attention_resolutions="8,16,32",
-                )
-            else:
-                raise KeyError(f"A new diffpir network was added to DIFFPIR_NETWOKRS but is not handled in the {self}.load_model method: {config.model_name}")
-            args = utils_model.create_argparser(model_config).parse_args([])
-            # load model and diffusion objects but don't need diffusion so it is discarded
-            model, _ = create_model_and_diffusion(**args_to_dict(args, model_and_diffusion_defaults().keys()))
-            model.load_state_dict(torch.load(args.model_path, map_location="cpu"))
-            self.model = model
-
-        else: # load DDPMPipeline model from HuggingFace
-            self.model = DDPMPipeline.from_pretrained(config.model_name).unet
-        
-        self.scheduler = DDPMScheduler.from_config(config=DPSSchedulerConfig().__dict__)
-
-    def save_restored_image(
-            self, 
-            restored_image: np.ndarray, 
-            restored_image_filename: str,
-            path: str = None,
-            img_ext: str = "png",
-        ):
-        path = path if path is not None else RESTORED_DATA_PATH
-        Path(path).mkdir(parents=True, exist_ok=True)
-        restored_image_path = os.path.join(path, f"{restored_image_filename}.{img_ext}")
-        utils_image.imsave(restored_image, restored_image_path)
-        if self.logger is not None:
-            self.logger.info(f"Restored image saved in: {restored_image_path}")
-        
     def apply_debluring(
             self,
             config: DPSDeblurConfig,
@@ -124,6 +65,7 @@ class DPSDiffuser(Diffuser):
             degraded_dataset_name: str = None,
             experiment_name: str = None,
             kernel_filename: str = None,
+            use_png_data: bool = True,
             img_ext: str = "png",
             save: bool = False,
         ) -> tuple[np.ndarray, dict[str, float]]:
@@ -137,6 +79,7 @@ class DPSDiffuser(Diffuser):
             - degraded_dataset_name: name of the degraded dataset (potential subfolder in DEGRADED_DATA_PATH).
             - experiment_name: name of the experiment (potential subfolder in RESTORED_DATA_PATH). If None, then save directly in RESTORED_DATA_PATH.
             - kernel_filename: name of the kernel (without extension). If None, then try to use self.kernel and self.kernel_filename.
+            - use_png_data: if True, the degraded image will be loaded from PNG file (=> uint values => [0,1] clipping) otherwise from npy file (=> float values can be unclipped).
             - img_ext: extension of the images (default: "png").
             - save: if True, the restored image will be saved in the RESTORED_DATA_PATH/<experiment_name> folder.
         
@@ -148,23 +91,19 @@ class DPSDiffuser(Diffuser):
         if self.model is None or self.scheduler is None:
             raise ValueError("The model and scheduler objects must be loaded before applying deblurring.")
 
-        # load images
-        degraded_dataset_name = degraded_dataset_name if degraded_dataset_name is not None else ""
-        clean_image_png_path = os.path.join(CLEAN_DATA_PATH, f"{clean_image_filename}.{img_ext}")
-        degraded_image_png_path = os.path.join(DEGRADED_DATA_PATH, degraded_dataset_name, f"{degraded_image_filename}.png")
-
-        clean_image = utils_image.imread_uint(clean_image_png_path)
-        degraded_image = utils_image.imread_uint(degraded_image_png_path)
-
-        # load kernel if necessary (otherwise use self.kernel and self.kernel_filename)
-        if kernel_filename is not None:
-            self.load_blur_kernel(kernel_filename)
-
-        if self.kernel is None or self.kernel_filename is None:
-            raise ValueError("The blur kernel must be loaded before applying deblurring.")
+        # load images (and kernel if specified)        
+        clean_image, degraded_image = self.load_data(
+            degraded_dataset_name=degraded_dataset_name if degraded_dataset_name is not None else "",
+            clean_image_filename=clean_image_filename,
+            degraded_image_filename=degraded_image_filename,
+            kernel_filename=kernel_filename,
+            use_png_data=use_png_data,
+            img_ext=img_ext,
+        )
 
         # apply DPS deblurring
-        self.logger.info(f"model_name: {self.config.model_name}")
+        self.log_banner("DPS Deblurring")
+        self.logger.info(f"- model_name: {self.config.model_name}")
         restored_image, metrics = apply_DPS_for_deblurring(
             config=config,
             clean_image_filename=clean_image_filename,
@@ -192,7 +131,6 @@ class DPSDiffuser(Diffuser):
         self.logger.info(50*"-") # separate logs between different images
 
         return restored_image, metrics
-    
     
     def apply_inpainting(
             self,
@@ -271,7 +209,7 @@ class DPSDiffuser(Diffuser):
                 img_ext=img_ext,
             )
 
-        self.logger.info(50*"-") # separate logs between different images
+        self.log_banner("--------------") # separate logs between different images
 
         return restored_image, metrics
     
@@ -281,39 +219,32 @@ class DPSDiffuser(Diffuser):
 
 def main():
 
-    # quick demo of the DPS deblurring
-    
     # setup device
     device = torch.device("cpu")
     if torch.cuda.is_available():
         device = torch.device("cuda")
         torch.cuda.empty_cache()
 
+    ### DEMO DPS deblurring
+
     dps_config = DPSConfig()
     dps_diffuser = DPSDiffuser(dps_config, autolog="dps_debluring_test", device=device)
 
-    dps_diffuser.load_blur_kernel("gaussian_kernel_05")
-    # dps_diffuser.load_blur_kernel("motion_kernel_1")
+    # dps_diffuser.load_blur_kernel("gaussian_kernel_05")
+    dps_diffuser.load_blur_kernel("motion_kernel_example")
 
     dps_deblur_config = DPSDeblurConfig()
-    img_name = "0"
+    img_name = "1"
     _ = dps_diffuser.apply_debluring(
         config=dps_deblur_config,
         clean_image_filename=img_name,
         degraded_image_filename=img_name,
-        degraded_dataset_name="blurred_ffhq",
-        kernel_filename="gaussian_kernel_05",
+        degraded_dataset_name="blurred_ffhq_test20",
+        # kernel_filename="gaussian_kernel_05",
         save=True,
     )
     
-    
-    # # quick demo of the DPS inpainting
-    
-    # # setup device
-    # device = torch.device("cpu")
-    # if torch.cuda.is_available():
-    #     device = torch.device("cuda")
-    #     torch.cuda.empty_cache()
+    ### DEMO DPS inpainting
 
     # dps_config = DPSConfig()
     # dps_diffuser = DPSDiffuser(dps_config, autolog="dps_inpainting_test", device=device)

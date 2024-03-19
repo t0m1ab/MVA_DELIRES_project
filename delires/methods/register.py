@@ -8,8 +8,7 @@ from delires.methods.pigdm.pigdm_diffuser import PiGDMDiffuser
 from delires.methods.pigdm.pigdm_configs import PiGDMConfig, PiGDMDeblurConfig
 
 
-
-DIFFUSER_TYPE = Literal["diffpir"]
+DIFFUSER_TYPE = Literal["diffpir", "dps", "pigdm"]
 
 DIFFUSERS = {
     "diffpir": DiffPIRDiffuser,
@@ -27,5 +26,5 @@ TASK_CONFIG = Union[
     DiffPIRDeblurConfig,
     DiffPIRInpaintingConfig,
     DPSDeblurConfig,
-    PiGDMDeblurConfig
+    PiGDMDeblurConfig,
 ]

@@ -1,28 +1,29 @@
 from dataclasses import dataclass
 
+# AVIALABLE NETWORKS: diffusion_ffhq_10m | 256x256_diffusion_uncond | google/ddpm-ema-celebahq-256
 
 @dataclass
 class DPSConfig:
-    model_name: str     = "diffusion_ffhq_10m"    # diffusion_ffhq_10m | 256x256_diffusion_uncond | google/ddpm-ema-celebahq-256
-    num_train_timesteps = 1000
+    model_name: str          = "diffusion_ffhq_10m"
+    num_train_timesteps: int = 1000
 
 
 @dataclass
 class DPSDeblurConfig(DPSConfig):
-    timesteps: int      = 500                              # number of timesteps for scheduler
-    noise_level_img: float     = 12.75/255.0                       # set AWGN noise level for LR image, default: 0
-    iter_num: int            = 10                                # set number of iterations
-    ddim_sample: bool         = False                             # sampling method
-    lambda_: float             = 1.0                               # key parameter lambda
+    timesteps: int             = 100              # number of timesteps for scheduler
+    noise_level_img: float     = 12.75/255.0      # set AWGN noise level for LR image, default: 0
+    # iter_num: int              = 10               # set number of iterations
+    # ddim_sample: bool          = False            # sampling method
+    # lambda_: float             = 1.0    
 
 
 @dataclass
 class DPSInpaintingConfig(DPSConfig):
-    timesteps: int      = 500                               # number of timesteps for scheduler
-    noise_level_img: float     = 12.75/255.0                       # set AWGN noise level for LR image, default: 0
-    iter_num: int            = 10                                # set number of iterations
-    ddim_sample: bool         = False                             # sampling method
-    lambda_: float             = 1.0                               # key parameter lambda
+    timesteps: int             = 100              # number of timesteps for scheduler
+    noise_level_img: float     = 12.75/255.0      # set AWGN noise level for LR image, default: 0
+    # iter_num: int              = 10               # set number of iterations
+    # ddim_sample: bool          = False            # sampling method
+    # lambda_: float             = 1.0    
 
 
 @dataclass

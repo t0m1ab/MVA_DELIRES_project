@@ -292,10 +292,11 @@ def uint2tensor3(img):
 
 # convert 2/3/4-dimensional torch tensor to uint
 def tensor2uint(img):
-    img = img.data.squeeze().float().clamp_(0, 1).cpu().numpy()
-    if img.ndim == 3:
-        img = np.transpose(img, (1, 2, 0))
-    return np.uint8((img*255.0).round())
+    """ torch.tensor of shape (1, C, H, W) or (C, H, W) to np.ndarray (H, W, C) """
+    img_uint = img.data.squeeze().float().clamp_(0, 1).cpu().numpy()
+    if img_uint.ndim == 3:
+        img_uint = np.transpose(img_uint, (1, 2, 0))
+    return np.uint8((img_uint*255.0).round())
 
 
 # --------------------------------------------
