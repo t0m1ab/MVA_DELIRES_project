@@ -151,7 +151,10 @@ def read_img(path):
 def imread_uint(path, n_channels=3):
     #  input: path
     # output: HxWx3(RGB or GGG), or HxWx1 (G)
+    if not os.path.isfile(path):
+        raise FileNotFoundError(f"File not found: {path}")
     if n_channels == 1:
+        print(path)
         img = cv2.imread(path, 0)  # cv2.IMREAD_GRAYSCALE
         img = np.expand_dims(img, axis=2)  # HxWx1
     elif n_channels == 3:
@@ -163,10 +166,14 @@ def imread_uint(path, n_channels=3):
     return img
 
 
-def imsave(img, img_path):
-    img = np.squeeze(img)
-    if img.ndim == 3:
-        img = img[:, :, [2, 1, 0]]
+def imsave(image, img_path):
+    img = np.squeeze(image) # 1CHW to CWH
+    if img.ndim == 3: # color image
+        if img.shape[0] == 3:
+            img = img.transpose(1, 2, 0)  # CHW to HWC
+        if not img.shape[2] == 3:
+            raise ValueError(f"Expected 3 channels, got image with shape {img.shape}")
+        img = img[:, :, [2, 1, 0]] # BGR to RGB
     cv2.imwrite(img_path, img)
 
 def imsave_batch(imgs, names, save_path, save_name):
@@ -244,6 +251,11 @@ def tensor2uint_batch(img):
     if img.ndim == 4:
         img = np.transpose(img, (0, 2, 3, 1))
     return np.uint8((img*255.0).round())
+
+def uint2float32(img: np.ndarray) -> torch.Tensor:
+    """ Convert uint8 image to float32 tensor with batch channel, transpose dims and set values in range [0,1] """
+    img_with_batch_dim = np.expand_dims(np.transpose(img, (2, 0, 1)), axis=0).astype(np.float32) / 255.
+    return torch.tensor(img_with_batch_dim, dtype=torch.float32)
 
 
 # --------------------------------
