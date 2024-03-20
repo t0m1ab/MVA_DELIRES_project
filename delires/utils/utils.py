@@ -17,6 +17,18 @@ def archive_kwargs(kwargs, path):
     json.dump(kwargs, open(path, "w"), indent="\t")
 
 
+def get_best_dimensions_for_plot(n: int) -> tuple:
+    """ Return the best dimensions for a plot with n subplots. """
+    divisors = [d for d in range(1, n + 1) if n % d == 0]
+    best_dims = (1, n)
+    for d in divisors:
+        if d > n // d:
+            break
+        diff = (n // d) - d
+        best_dims = (d, n // d) if diff < (best_dims[1] - best_dims[0]) else best_dims
+    return best_dims
+
+
 def download_diffusion_model(path: str = None):
     """ 
     Download diffusion model listed in DIFFPIR_NETWORKS from HF_REPO_ID

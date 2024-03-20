@@ -62,7 +62,7 @@ class Diffuser():
         """ Load a blur kernel from a file using the given information. """
         k = load_blur_kernel(filename=kernel_filename, kernel_family=kernel_family, kernel_idx=kernel_idx) # load kernel
         self.kernel = np.expand_dims(k, axis=(0,1)) # add batch dim and channel dim for compatibility
-        self.kernel_filename = kernel_filename
+        self.kernel_filename = kernel_filename if kernel_filename is not None else f"{kernel_family}_{kernel_idx}"
 
     def load_inpainting_mask(self, masks_filename: str, mask_index: int = 0):
         """ Load a mask from a file with a given mask set filename and given index within the selected masks set (name without extension). """

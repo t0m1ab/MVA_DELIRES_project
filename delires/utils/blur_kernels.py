@@ -1,13 +1,17 @@
 import os
 from pathlib import Path
 import hdf5storage
-import numpy as np
 import matplotlib.pyplot as plt
+import numpy as np
+import torch
 from huggingface_hub import hf_hub_download
 
+import delires.utils.utils as utils
+import delires.methods.utils.utils_agem as utils_agem
 from delires.params import (
     OPERATORS_PATH, 
     MODELS_PATH, 
+    RESTORED_DATA_PATH,
     HF_REPO_ID,
     MATLAB_BLUR_KERNELS_FILES,
 )
@@ -77,11 +81,14 @@ def matlab2numpy_kernel(matlab_kernels_filename: str, path: str = None, n_kernel
 
     # save individual kernels as .npy files
     for kidx in kernels_indexes:
-        kernel = kernels_list[0, kidx].astype(np.float32)
+        kernel = kernels_list[0, kidx].astype(np.float32).squeeze()
         assert kernel.ndim == 2
         assert kernel.dtype == np.float32
         assert kernel.min() >= 0
         assert kernel.max() <= 1
+        if kernel.shape[0] != kernel.shape[1]:
+            max_size = max(kernel.shape)
+            kernel = utils_agem.pad_kernel(torch.tensor(kernel, dtype=torch.float32), (max_size,max_size)).numpy()
         kernel_name = f"{kernel_basename}_{kidx}.npy"
         np.save(os.path.join(path, kernel_basename, kernel_name), kernel)
     
@@ -153,6 +160,39 @@ def visualize_single_kernel(kernel_family: str, kernel_idx: int|str):
     _ = plt.show()
 
 
+def plot_kernel_family(kernel_family: str, n_kernels: int = None, path: str = None):
+    """ Create a plot with all kernels from a kernel family limited to n_kernels if specified. """
+    
+    path = path if path is not None else OPERATORS_PATH
+    
+    if not os.path.isdir(os.path.join(path, kernel_family)):
+        raise FileNotFoundError(f"Kernel family {kernel_family} not found in: {path}")
+
+    kernels_filenames = [f for f in os.listdir(os.path.join(path, kernel_family)) if f.endswith(".npy")]
+    n_kernels = 100 if len(kernels_filenames) > 100 else n_kernels
+    kernels_filenames = kernels_filenames[:n_kernels] if n_kernels is not None else kernels_filenames
+    kernels_filenames = sorted(kernels_filenames)
+    kernels_indexes = [int(f.split("_")[-1].split(".")[0]) for f in kernels_filenames]
+
+    kernels = [np.load(os.path.join(path, kernel_family, f)) for f in kernels_filenames]
+
+    (n_rows, n_cols) = utils.get_best_dimensions_for_plot(len(kernels))
+
+
+    fig, ax = plt.subplots(n_rows, n_cols, figsize=(3*n_cols, 3*n_rows), dpi=300)
+    for row in range(n_rows):
+        for col in range(n_cols):
+            idx = row * n_cols + col
+            ax[row, col].imshow(kernels[idx], cmap="gray")
+            ax[row, col].axis("off")
+            ax[row, col].set_title(f"id={kernels_indexes[idx]} | shape={kernels[idx].shape}")
+    fig.suptitle(f"{kernel_family} kernels", fontsize=20)
+    fig.tight_layout()
+    plt.savefig(os.path.join(path, f"{kernel_family }_kernels.png"))
+
+    print(f"Plot of {kernel_family} kernels saved in {path}")
+
+
 def main():
 
     ### DOWNLOAD matlab kernels files from HF_REPO_ID and stored them in MODELS_PATH
@@ -163,10 +203,10 @@ def main():
     matlab2numpy_kernel(matlab_kernels_filename='kernels_12.mat') # diffpir kernels
     matlab2numpy_kernel(matlab_kernels_filename='custom_blur_centered.mat', n_kernels=20, seed=42) # DELIRES TP3 motion kernels
 
-    ### VISUALIZE a single kernel
-    # visualize_single_kernel(kernel_family="levin09", kernel_idx=1)
-    # visualize_single_kernel(kernel_family="kernels_12", kernel_idx=8)
-    # visualize_single_kernel(kernel_family="custom_blur_centered", kernel_idx=30277)
+    ### VISUALIZE kernels
+    plot_kernel_family(kernel_family="levin09", n_kernels=None)
+    plot_kernel_family(kernel_family="kernels_12", n_kernels=None)
+    plot_kernel_family(kernel_family="custom_blur_centered", n_kernels=None)
 
 
 if __name__ == "__main__":
