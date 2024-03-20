@@ -93,7 +93,7 @@ def apply_DiffPIR_for_inpainting(
 
     if config.calc_LPIPS:
         import lpips
-        loss_fn_vgg = lpips.LPIPS(net='vgg').to(device)
+        loss_fn_vgg = lpips.LPIPS(net='vgg', verbose=False).to(device)
 
     # setup logger
     # result_name = build_result_name(degraded_image_filename, config)

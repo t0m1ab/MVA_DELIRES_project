@@ -166,6 +166,8 @@ class DPSDiffuser(Diffuser):
             raise ValueError("The mask must be loaded before applying inpainting.")
 
         # apply DPS inpainting
+        self.log_banner("DPS Inpainting")
+        self.logger.info(f"- model_name: {self.config.model_name}")
         restored_image, metrics = apply_DPS_for_inpainting(
             config=config,
             clean_image_filename=clean_image_filename,
@@ -236,10 +238,10 @@ def main():
         dps_diffuser = DPSDiffuser(dps_config, autolog="dps_inpainting_test", device=device)
 
         mask_family = "box_masks"
-        mask_idx = 0
+        mask_idx = 1
         dps_diffuser.load_inpainting_mask(mask_family=mask_family, mask_idx=mask_idx)  
 
-        img_name = "0"
+        img_name = "1"
 
         _ = dps_diffuser.apply_inpainting(
             config=DPSInpaintingConfig(),

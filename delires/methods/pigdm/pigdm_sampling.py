@@ -26,11 +26,6 @@ def pigdm_sampling(
     sample_size = y.shape[-1]
     step_size = scheduler.config.num_train_timesteps // scheduler.num_inference_steps
 
-    print("STEP SIZE", step_size, config.timesteps)
-    print(scheduler.config.num_train_timesteps)
-    print(scheduler.num_inference_steps)
-    print(scheduler.timesteps)
-
     input = torch.randn((1, 3, sample_size, sample_size)).to(device)
 
     for t in tqdm(scheduler.timesteps, desc="PiGDM sampling"):

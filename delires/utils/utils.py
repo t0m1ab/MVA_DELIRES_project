@@ -7,6 +7,10 @@ from huggingface_hub import HfFileSystem, hf_hub_download
 from delires.params import DIFFPIR_NETWOKRS, HF_REPO_ID, MODELS_PATH
 
 
+def listdir(path: str) -> list[str]:
+    return [x for x in os.listdir(path) if not x.startswith(".")]
+
+
 def load_json(filename: str) -> dict:
     with open(filename, "r") as file:
         json_dict = json.load(file)

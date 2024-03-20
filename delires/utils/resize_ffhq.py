@@ -4,6 +4,7 @@ from tqdm import tqdm
 import argparse
 from PIL import Image
 
+from delires.utils import utils
 from delires.params import CLEAN_DATA_PATH
 
 
@@ -19,7 +20,7 @@ def resize_ffhq(path: str, folder_idx: int, filename: str, size: int):
         raise ValueError(f"Invalid path: {ffhq_path}. Must be a valid directory.")
     
     if filename is None:
-        files = os.listdir(ffhq_path)
+        files = utils.listdir(ffhq_path)
         if len(files) == 0:
             raise ValueError(f"No files found in path: {ffhq_path}.")
     else:

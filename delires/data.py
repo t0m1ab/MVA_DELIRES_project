@@ -63,23 +63,7 @@ def load_operator(
     return operator
 
 
-# BLURRING
-
-def tito_blur(image: np.ndarray, kernel: np.ndarray):
-    """
-    Apply a blur kernel to an image. 
-    
-    ARGUMENTS:
-        - image: np.ndarray, the image to blur.
-        - kernel: np.ndarray with 2 dimension, the blur kernel in float.
-        
-    RETURNS:
-        - np.ndarray, the blurred image.
-    """
-    # mode='wrap' is important for analytical solution
-    blurred_img = ndimage.convolve(image, np.expand_dims(kernel, axis=2), mode='wrap')
-    return blurred_img
-
+### BLURRING
 
 def blur(img: torch.Tensor, k: np.ndarray | torch.Tensor) -> torch.Tensor:
     """ Originally fft_blur from PiGDM utils_agem.py """
@@ -184,7 +168,7 @@ def generate_degraded_dataset_blurred(
     Path(degraded_dataset_path).mkdir(parents=True, exist_ok=True)
     
     # Load clean dataset
-    clean_dataset = utils.sorted_nicely(os.listdir(clean_dataset_path))
+    clean_dataset = utils.sorted_nicely(utils.listdir(clean_dataset_path))
     clean_dataset = [f for f in clean_dataset if not f.startswith(".")]
     kwargs = {
         "degraded_dataset_name": degraded_dataset_name,
@@ -208,127 +192,6 @@ def generate_degraded_dataset_blurred(
         )
         
     print(f"Blurred dataset '{degraded_dataset_name}' generated.")
-        
-    return degraded_dataset_path
-
-
-# DOWNSAMPLING
-
-def load_downsample_kernel(
-        classical_degradation: bool,
-        sf: int,
-        k_index: int = 0,
-    ):
-    """ Fetch the downsample kernel. k_index shoyld be 0 for bicubic degradation, in [0, 7] for classical degradation."""
-    # kernels = hdf5storage.loadmat(os.path.join('kernels', 'Levin09.mat'))['kernels']
-    if classical_degradation:
-        kernels = hdf5storage.loadmat(os.path.join(OPERATORS_PATH, 'kernels_12.mat'))['kernels']
-    else:
-        kernels = hdf5storage.loadmat(os.path.join(OPERATORS_PATH, 'kernels_bicubicx234.mat'))['kernels']
-    
-    if not classical_degradation:  # for bicubic degradation
-        k_index = sf-2 if sf < 5 else 2
-    return kernels[0, k_index].astype(np.float64)
-
-
-def create_downsampled_image(
-        kernel: np.ndarray,
-        img: str,
-        sr_mode: str,
-        classical_degradation: bool,
-        sf: int,
-        n_channels: int,
-        noise_level_img: float,
-        save_path: str|None = None,
-        seed: int = 0,
-        show_img: bool = False,
-        device: str = "cpu",
-    ) -> tuple[np.ndarray, np.ndarray, str, str]:
-    """ Create a downsampled and noised image from a given clean image and a blur/downsample kernel. """
-    
-    img_name, ext = os.path.splitext(os.path.basename(img))
-    clean_img = utils_image.imread_uint(img, n_channels=n_channels)
-    clean_img = utils_image.modcrop(clean_img, sf)  # modcrop
-
-    if sr_mode == 'blur':
-        if classical_degradation:
-            degraded_img = utils_sr.classical_degradation(clean_img, kernel, sf)
-            utils_image.imshow(degraded_img) if show_img else None
-            degraded_img = utils_image.uint2single(degraded_img)
-        else:
-            degraded_img = utils_image.imresize_np(utils_image.uint2single(clean_img), 1/sf)
-    elif sr_mode == 'cubic':
-        clean_img_tensor = np.transpose(clean_img, (2, 0, 1))
-        clean_img_tensor = torch.from_numpy(clean_img_tensor)[None,:,:,:].to(device)
-        clean_img_tensor = clean_img_tensor / 255
-        # set up resizers
-        down_sample = Resizer(clean_img_tensor.shape, 1/sf).to(device)
-        degraded_img = down_sample(clean_img_tensor)
-        degraded_img = degraded_img.cpu().numpy()       #[0,1]
-        degraded_img = np.squeeze(degraded_img)
-        if degraded_img.ndim == 3:
-            degraded_img = np.transpose(degraded_img, (1, 2, 0))
-
-    np.random.seed(seed=seed)  # for reproducibility
-    degraded_img = degraded_img * 2 - 1
-    degraded_img += np.random.normal(0, noise_level_img * 2, degraded_img.shape) # add AWGN
-    degraded_img = degraded_img / 2 + 0.5
-    
-    if save_path is not None:
-        degraded_img = utils_image.single2uint(degraded_img)
-        utils_image.imsave(degraded_img, os.path.join(save_path, f"{img_name}{ext}"))
-    else:
-        return degraded_img, clean_img, img_name, ext
-
-
-def generate_degraded_dataset_downsampled(
-    degraded_dataset_name: str,
-    kernel: np.ndarray,
-    kernel_name: str,
-    n_channels: int,
-    sr_mode: str,
-    classical_degradation: bool,
-    sf: int,
-    noise_level_img: float,
-    seed: int = 0,
-    show_img: bool = False,
-    ):
-    """ Generate a degraded dataset from a clean dataset using a given downsample kernel. """
-    print(f"Generating downsampled dataset '{degraded_dataset_name}' from clean dataset using kernel {kernel_name}.")
-    clean_dataset_path = os.path.join(CLEAN_DATA_PATH)
-    degraded_dataset_path = os.path.join(DEGRADED_DATA_PATH, degraded_dataset_name)
-    
-    # Load clean dataset
-    clean_dataset = utils.sorted_nicely(os.listdir(clean_dataset_path))
-    os.makedirs(degraded_dataset_path, exist_ok=True)
-    kwargs = {
-        "degraded_dataset_name": degraded_dataset_name,
-        "images": [os.path.basename(f).split(".")[0] for f in clean_dataset], # remove ext
-        "kernel_name": kernel_name, 
-        "n_channels": n_channels, 
-        "sr_mode": sr_mode, 
-        "classical_degradation": classical_degradation, 
-        "sf": sf, 
-        "noise_level_img": noise_level_img, 
-        "seed": seed
-    }
-    utils.archive_kwargs(kwargs, os.path.join(degraded_dataset_path, "dataset_info.json"))   
-    
-    for img in clean_dataset:
-        create_downsampled_image(
-            kernel,
-            os.path.join(clean_dataset_path, img),
-            sr_mode,
-            classical_degradation,
-            sf,
-            n_channels,
-            noise_level_img,
-            degraded_dataset_path,
-            seed,
-            show_img,
-        )
-        
-    print(f"Downsampled dataset '{degraded_dataset_name}' generated.")
         
     return degraded_dataset_path
 
@@ -434,7 +297,7 @@ def generate_degraded_dataset_masked(
     degraded_dataset_path = os.path.join(DEGRADED_DATA_PATH, degraded_dataset_name)
     
     # Load clean dataset
-    clean_dataset = utils.sorted_nicely(os.listdir(clean_dataset_path))
+    clean_dataset = utils.sorted_nicely(utils.listdir(clean_dataset_path))
     os.makedirs(degraded_dataset_path, exist_ok=True)
     image_names = [os.path.basename(f).split(".")[0] for f in clean_dataset] # remove ext    
     
@@ -455,13 +318,13 @@ def generate_degraded_dataset_masked(
     for i, img in enumerate(clean_dataset):
         mask = load_operator(operator_family=mask_family_name, operator_idx=i)
         create_masked_image(
-            mask, 
-            os.path.join(clean_dataset_path, img),
-            n_channels,
-            noise_level_img,
-            degraded_dataset_path,
-            seed,
-            show_img,
+            mask=mask, 
+            img=os.path.join(clean_dataset_path, img),
+            n_channels=n_channels,
+            noise_level_img=noise_level_img,
+            save_path=degraded_dataset_path,
+            seed=seed,
+            show_img=show_img,
         )
         
     print(f"Masked dataset '{degraded_dataset_name}' generated.")
@@ -470,57 +333,6 @@ def generate_degraded_dataset_masked(
 
 
 def main():
-
-    ### GENERATE BLURRED DATASET
-
-    noise_level_img = 12.75/255.0 # 0.05
-
-    kernel_filename = None
-    kernel_family = "levin09"
-    kernel_idx = 0
-
-    generate_degraded_dataset_blurred(
-        degraded_dataset_name="blurred_ffhq_test20", 
-        kernel=load_operator(filename=kernel_filename, operator_family=kernel_family, operator_idx=kernel_idx),
-        kernel_name=kernel_filename if kernel_filename is not None else f"{kernel_family}_{kernel_idx}", 
-        n_channels=3, 
-        noise_level_img=noise_level_img, 
-        seed=42, 
-    )
-
-    ### GENERATE DOWNSAMPLED DATASET
-
-    # seed = 0
-    # sr_mode = "cubic"
-    # classical_degradation = False
-    # sf = 4
-    # if classical_degradation and sr_mode == "blur":
-    #     kernel_name = "kernels_12.mat"
-    #     kernel = load_downsample_kernel(classical_degradation, sf, 0)
-    # else:
-    #     kernel_name = "None"
-    #     kernel = None
-    # generate_degraded_dataset_downsampled("downsampled_ffhq_test20", kernel, kernel_name, 3, sr_mode, False, 4, 0.05, seed, False)
-    
-    
-    ### GENERATE MASKED DATASET
-    
-    # noise_level_img = 12.75/255.0 # 0.05
-
-    # mask_family_name = "box_masks"
-
-    # generate_degraded_dataset_masked(
-    #     degraded_dataset_name="masked_ffhq_test20", 
-    #     mask_family_name=mask_family_name, 
-    #     n_channels=3, 
-    #     noise_level_img=noise_level_img, 
-    #     seed=42, 
-    # )
-    
-
-if __name__ == "__main__":
-
-    NOISE_LEVEL_IMAGE = 12.75/255.0
 
     parser = argparse.ArgumentParser(description="Generate kernels/masks/datasets.")
     parser.add_argument(
@@ -544,14 +356,6 @@ if __name__ == "__main__":
         type=int,
         default=100, 
         help="specify the number of masks/kernels to generate"
-    )
-    parser.add_argument(
-        "--noise",
-        "-n",
-        dest="noise",
-        type=float,
-        default=NOISE_LEVEL_IMAGE, 
-        help="specify the noise level in [0,1]"
     )
     parser.add_argument(
         "--seed",
@@ -598,4 +402,41 @@ if __name__ == "__main__":
         utils_plots.plot_operator_family(operator_family="random_masks", n_samples=16)
     
     if not args.kernel and not args.mask: # generate dataset
-        main()
+        
+        # GENERATE BLURRED DATASET
+
+        noise_level_img = 12.75/255.0 # 0.05
+
+        kernel_filename = None
+        kernel_family = "levin09"
+        kernel_idx = 0
+
+        generate_degraded_dataset_blurred(
+            degraded_dataset_name="blurred_ffhq_test20", 
+            kernel=load_operator(filename=kernel_filename, operator_family=kernel_family, operator_idx=kernel_idx),
+            kernel_name=kernel_filename if kernel_filename is not None else f"{kernel_family}_{kernel_idx}", 
+            n_channels=3, 
+            noise_level_img=noise_level_img, 
+            seed=42, 
+        )
+        
+        # GENERATE MASKED DATASET
+        
+        noise_level_img = 12.75/255.0 # 0.05
+
+        mask_family_name = "box_masks"
+
+        generate_degraded_dataset_masked(
+            degraded_dataset_name="masked_ffhq_test20", 
+            mask_family_name=mask_family_name, 
+            n_channels=3, 
+            noise_level_img=noise_level_img, 
+            seed=42, 
+        )
+
+
+if __name__ == "__main__":
+    main()
+    # command example 1: python data.py --kernel -x 20 -s 42 (create 20 blur kernels with seed 42)
+    # command example 2: python data.py --mask -x 20 -s 42 (create 20 inpainting masks with seed 42)
+    # command example 3: python data.py (generate datasets with existing masks/kernels familiy)

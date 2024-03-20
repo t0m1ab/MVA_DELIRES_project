@@ -7,5 +7,6 @@
 * Do DPS/PiGDM...
 
 # To check:
-* scheduler configs (num_steps for example) for DPS and PiGDM
-* get rid file utils_image.py in delires/methods/ because the same file is already present in delires/utils/ and it is a better location I think
+* use different kernels for each image in a blurred_dataset and encode mapping in JSON dataset infos
+* adapt main (invert loops to alternate between methods during full experiment ?)
+* add option to save intermediate generations in each method (desactivate when running experiment to avoid overload)

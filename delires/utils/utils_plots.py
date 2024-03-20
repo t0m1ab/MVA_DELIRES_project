@@ -31,7 +31,7 @@ def plot_operator_family(operator_family: str, n_samples: int = None, path: str 
     if not os.path.isdir(os.path.join(path, operator_family)):
         raise FileNotFoundError(f"Operator family {operator_family} not found in: {path}")
 
-    operators_filenames = [f for f in os.listdir(os.path.join(path, operator_family)) if f.endswith(".npy")]
+    operators_filenames = [f for f in utils.listdir(os.path.join(path, operator_family)) if f.endswith(".npy")]
     n_samples = 100 if len(operators_filenames) > 100 else n_samples
     operators_filenames = operators_filenames[:n_samples] if n_samples is not None else operators_filenames
     operators_filenames = sorted(operators_filenames)

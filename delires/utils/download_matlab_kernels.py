@@ -95,20 +95,6 @@ def matlab2numpy_kernel(matlab_kernels_filename: str, path: str = None, n_kernel
     print(f"Extracted {n_kernels} kernels from {matlab_kernels_filename} and saved them in: {path}/{kernel_basename}")
 
 
-def tito_load_blur_kernel(kernel_filename: str, path: str = None) -> np.ndarray:
-    """ Load a blur kernel stored as a .npy file in OPERATORS_PATH. """
-    path = OPERATORS_PATH if path is None else path
-    kernel_filename = kernel_filename.split(".")[0] # remove extension if present
-    
-    kernel = np.load(os.path.join(OPERATORS_PATH, f"{kernel_filename}.npy")) # load kernel
-    kernel = np.squeeze(kernel) # remove single dimensions
-
-    if not kernel.ndim == 2:
-        raise ValueError(f"kernel.ndim must be 2, but kernel has shape {kernel.shape}")
-
-    return kernel
-
-
 def main():
 
     ### DOWNLOAD matlab kernels files from HF_REPO_ID and stored them in MODELS_PATH

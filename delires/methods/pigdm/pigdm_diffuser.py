@@ -168,6 +168,8 @@ class PiGDMDiffuser(Diffuser):
             raise ValueError("The mask must be loaded before applying inpainting.")
 
         # apply PiGDM inpainting
+        self.log_banner("PiGDM Inpainting")
+        self.logger.info(f"- model_name: {self.config.model_name}")
         restored_image, metrics = apply_PiGDM_for_inpainting(
             config=config,
             clean_image_filename=clean_image_filename,
@@ -237,8 +239,6 @@ def main():
         pigdm_config = PiGDMConfig()
         pigdm_diffuser = PiGDMDiffuser(pigdm_config, autolog="pigdm_inpainting_test", device=device)
 
-        # pigdm_diffuser.load_blur_kernel("gaussian_kernel_05")
-        pigdm_diffuser.load_blur_kernel("motion_kernel_example")
         mask_family = "box_masks"
         mask_idx = 1
         pigdm_diffuser.load_inpainting_mask(mask_family=mask_family, mask_idx=mask_idx)  

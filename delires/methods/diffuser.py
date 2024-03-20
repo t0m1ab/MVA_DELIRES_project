@@ -7,7 +7,7 @@ from abc import abstractmethod
 import torch
 from diffusers import DDPMPipeline, DDPMScheduler, UNet2DModel
 
-from delires.data import load_downsample_kernel, load_operator
+from delires.data import load_operator
 from delires.utils import utils_image
 from delires.utils.utils_logger import logger_info
 from delires.methods.dps.dps_configs import DPSConfig, DPSSchedulerConfig
@@ -73,7 +73,6 @@ class Diffuser():
     def load_downsample_kernel(self, k_index: int = 0, cwd: str = ""):
         """ Load a downsampling kernel from a file or from a given kernel filename (name without extension). """
         raise NotImplementedError("The degradation method is not implemented yet in children classes.")
-        self.kernel = load_downsample_kernel(self.classical_degradation, self.sf, k_index, cwd)
     
     def load_model(
             self, 
