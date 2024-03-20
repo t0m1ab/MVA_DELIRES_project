@@ -114,20 +114,6 @@ def create_blur_kernel(
     return k
 
 
-# def load_blur_kernel(diy_kernel_name: str|None = None) -> np.ndarray:
-#     """ Load a blur kernel stored as a .npy file in OPERATORS_PATH. """
-#     if diy_kernel_name:
-#         k = np.load(os.path.join(OPERATORS_PATH, f"{diy_kernel_name}.npy"))
-#     else:
-#         k_index = 0
-#         kernels = hdf5storage.loadmat(os.path.join(OPERATORS_PATH, 'Levin09.mat'))['kernels']
-#         k = kernels[0, k_index].astype(np.float32)
-
-#     k = np.squeeze(k) # remove single dimensions
-
-#     return k
-
-
 def create_blurred_and_noised_image(
         kernel: np.ndarray, 
         img: str,

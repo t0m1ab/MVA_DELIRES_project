@@ -14,10 +14,7 @@ delires/methods/diffpir/figs/
 delires/methods/diffpir/model_zoo/
 delires/methods/diffpir/results/
 
-delires/operators/custom_blur_centered/**
-delires/operators/kernels_12/**
-delires/operators/levin09/**
-delires/operators/custom_blur_centered.mat
+delires/operators/
 
 **/notes.txt
 **/sandbox.py

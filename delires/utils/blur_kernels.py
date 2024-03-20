@@ -3,8 +3,36 @@ from pathlib import Path
 import hdf5storage
 import numpy as np
 import matplotlib.pyplot as plt
+from huggingface_hub import hf_hub_download
 
-from delires.params import OPERATORS_PATH, CLEAN_DATA_PATH, DEGRADED_DATA_PATH
+from delires.params import (
+    OPERATORS_PATH, 
+    MODELS_PATH, 
+    HF_REPO_ID,
+    MATLAB_BLUR_KERNELS_FILES,
+)
+
+
+def download_matlab_kernels_from_hf_hub(path: str = None):
+    """ 
+    Download matlab kernels files listed in MATLAB_BLUR_KERNELS_FILES from HF_REPO_ID
+    and stored them in path.
+    """
+
+    path = path if path is not None else OPERATORS_PATH
+    Path(path).mkdir(parents=True, exist_ok=True)
+
+    print(f"Downloading matlab kernels from {HF_REPO_ID}...")
+    for filename in MATLAB_BLUR_KERNELS_FILES:
+        if os.path.isfile(os.path.join(path, filename)):
+            print(f"File {filename} already exists in {path}")
+        else:
+            _ = hf_hub_download(
+                repo_id=HF_REPO_ID,
+                repo_type="model",
+                filename=filename,
+                local_dir=path,
+            )
 
 
 def matlab2numpy_kernel(matlab_kernels_filename: str, path: str = None, n_kernels: int = None, seed: int = None):
@@ -92,18 +120,18 @@ def visualize_single_kernel(kernel_family: str, kernel_idx: int|str):
 
 def main():
 
-    ### extract <100 matlab kernels in individual .npy files for each of the following matlab kernels files
-    ### 'Levin09.mat', 'kernels_12.mat' and 'custom_blur_centered.mat' stored in OPERATORS_PATH
+    ### DOWNLOAD matlab kernels files from HF_REPO_ID and stored them in MODELS_PATH
+    download_matlab_kernels_from_hf_hub()
+
+    ### EXTRACT matlab kernels in individual .npy files for each of the following matlab kernels files
     matlab2numpy_kernel(matlab_kernels_filename='Levin09.mat') # diffpir kernels
     matlab2numpy_kernel(matlab_kernels_filename='kernels_12.mat') # diffpir kernels
     matlab2numpy_kernel(matlab_kernels_filename='custom_blur_centered.mat', n_kernels=20, seed=42) # DELIRES TP3 motion kernels
 
-    ### visualize a single kernel
-    visualize_single_kernel(kernel_family="levin09", kernel_idx=1)
+    ### VISUALIZE a single kernel
+    # visualize_single_kernel(kernel_family="levin09", kernel_idx=1)
     # visualize_single_kernel(kernel_family="kernels_12", kernel_idx=8)
     # visualize_single_kernel(kernel_family="custom_blur_centered", kernel_idx=30277)
-
-    ### kernels_12 -> kernels12 for simplicity spltting kernel_family_name from idx...
 
 
 if __name__ == "__main__":

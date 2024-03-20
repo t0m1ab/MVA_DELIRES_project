@@ -5,7 +5,6 @@ from tqdm import tqdm
 from logging import Logger
 from diffusers import DDPMScheduler, UNet2DModel
 
-from delires.utils.utils_image import get_infos_img
 import delires.methods.utils.utils_agem as utils_agem
 import delires.utils.utils_image as utils_image
 from delires.methods.utils.utils import adapt_mask_dps_pigdm
@@ -47,9 +46,9 @@ def apply_PiGDM_for_inpainting(
     scheduler.set_timesteps(config.timesteps)
 
     if logger is not None: # debug logs
-        logger.debug(get_infos_img(clean_image))
-        logger.debug(get_infos_img(degraded_image))
-        logger.debug(get_infos_img(mask))
+        logger.debug(utils_image.get_infos_img(clean_image))
+        logger.debug(utils_image.get_infos_img(degraded_image))
+        logger.debug(utils_image.get_infos_img(mask))
 
     # setup data and mask
     sample = {
@@ -60,9 +59,9 @@ def apply_PiGDM_for_inpainting(
     }
 
     if logger is not None: # debug logs
-        logger.debug(get_infos_img(sample["H"]))
-        logger.debug(get_infos_img(sample["L"]))
-        logger.debug(get_infos_img(sample["mask"]))
+        logger.debug(utils_image.get_infos_img(sample["H"]))
+        logger.debug(utils_image.get_infos_img(sample["L"]))
+        logger.debug(utils_image.get_infos_img(sample["mask"]))
 
     # log informations
     if logger is not None:
