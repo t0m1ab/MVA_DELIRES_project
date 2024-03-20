@@ -1,6 +1,7 @@
 import os
 from pathlib import Path
 import hdf5storage
+import argparse
 import numpy as np
 from scipy import ndimage
 import torch
@@ -8,11 +9,12 @@ from typing import List
 
 import delires.utils.utils as utils
 import delires.utils.utils_image as utils_image
-from delires.methods.diffpir.utils import utils_sisr as sr
+import delires.utils.utils_plots as utils_plots
+from delires.methods.diffpir.utils import utils_sisr as utils_sr
 from delires.utils.utils_resizer import Resizer
 from delires.methods.diffpir.utils.utils_deblur import MotionBlurOperator, GaussialBlurOperator
 from delires.methods.utils.utils_agem import fft_blur
-from delires.methods.utils.utils_inpaint import mask_generator
+from delires.methods.utils import utils_inpaint as utils_inpaint
 from delires.params import OPERATORS_PATH, CLEAN_DATA_PATH, DEGRADED_DATA_PATH
 
 
@@ -87,12 +89,12 @@ def blur(img: torch.Tensor, k: np.ndarray | torch.Tensor) -> torch.Tensor:
 
 
 def create_blur_kernel(
-    blur_mode: str,
-    kernel_size: int,
-    seed: int = 0,
-    kernel_save_name: str|None = "",
-    device: str = "cpu",
-):
+        blur_mode: str,
+        kernel_size: int,
+        seed: int = 0,
+        kernel_save_name: str|None = "",
+        device: str = "cpu",
+    ):
     np.random.seed(seed=seed) # for reproducibility
     kernel_std = 3.0 if blur_mode == 'Gaussian' else 0.5
     if blur_mode == 'Gaussian':
@@ -213,9 +215,9 @@ def generate_degraded_dataset_blurred(
 # DOWNSAMPLING
 
 def load_downsample_kernel(
-    classical_degradation: bool,
-    sf: int,
-    k_index: int = 0,
+        classical_degradation: bool,
+        sf: int,
+        k_index: int = 0,
     ):
     """ Fetch the downsample kernel. k_index shoyld be 0 for bicubic degradation, in [0, 7] for classical degradation."""
     # kernels = hdf5storage.loadmat(os.path.join('kernels', 'Levin09.mat'))['kernels']
@@ -250,7 +252,7 @@ def create_downsampled_image(
 
     if sr_mode == 'blur':
         if classical_degradation:
-            degraded_img = sr.classical_degradation(clean_img, kernel, sf)
+            degraded_img = utils_sr.classical_degradation(clean_img, kernel, sf)
             utils_image.imshow(degraded_img) if show_img else None
             degraded_img = utils_image.uint2single(degraded_img)
         else:
@@ -339,23 +341,41 @@ def apply_mask(image: np.ndarray, mask: np.ndarray) -> np.ndarray:
 
 
 def create_inpainting_masks_family(
-    mask_type: str,
-    mask_len_range: List[int] = None,
-    mask_prob_range: List[float] =None,
-    image_shape: List[int] = (256, 256),
-    margin: List[int] = (16, 16),
-    number_masks: int = 20,
-    mask_family_name: str|None = None,
-    seed: int = 0,
+        mask_type: str,
+        mask_len_range: List[int] = None,
+        mask_prob_range: List[float] = None,
+        image_shape: List[int] = (256, 256),
+        margin: List[int] = (16, 16),
+        number_masks: int = 20,
+        mask_family_name: str = None,
+        path: str = None,
+        seed: int = 0,
     ):
-    mask_family_path = os.path.join(OPERATORS_PATH, mask_family_name)
-    os.makedirs(mask_family_path, exist_ok=True)
+    """
+    Build family of inpainting masks and save them in a subfolder in path.
+    """
+
+    path = path if path is not None else OPERATORS_PATH
+    mask_family_path = os.path.join(path, mask_family_name)
+    Path(mask_family_path).mkdir(parents=True, exist_ok=True)
     np.random.seed(seed=seed) # for reproducibility
-    mask_gen = mask_generator(mask_type=mask_type, mask_len_range=mask_len_range, mask_prob_range=mask_prob_range, img_shape=image_shape, margin=margin)
+
+    # generate masks
+    mask_gen = utils_inpaint.mask_generator(
+        mask_type=mask_type, 
+        mask_len_range=mask_len_range, 
+        mask_prob_range=mask_prob_range, 
+        img_shape=image_shape, 
+        margin=margin
+    )
+    
+    # save masks
     for i in range(number_masks):
         mask = mask_gen()
         np.save(os.path.join(mask_family_path, f"{mask_family_name}_{i}.npy"), mask)
-    utils.archive_kwargs({
+
+    # save masks infos
+    masks_infos_dict = {
         "mask_family_name": mask_family_name,
         "number_masks": number_masks,
         "mask_type": mask_type,
@@ -363,7 +383,8 @@ def create_inpainting_masks_family(
         "mask_prob_range": mask_prob_range,
         "image_shape": image_shape,
         "margin": margin,
-    }, os.path.join(mask_family_path, "mask_info.json"))
+    }
+    utils.archive_kwargs(masks_infos_dict, os.path.join(mask_family_path, "mask_info.json"))
 
 
 def create_masked_image(
@@ -397,7 +418,8 @@ def create_masked_image(
         ) # save as .png for visualization
     else:
         return degraded_img, clean_img, img_name, ext
-    
+
+
 def generate_degraded_dataset_masked(
     degraded_dataset_name: str,
     mask_family_name: str,
@@ -449,22 +471,22 @@ def generate_degraded_dataset_masked(
 
 def main():
 
-    # ### GENERATE BLURRED DATASET
+    ### GENERATE BLURRED DATASET
 
-    # noise_level_img = 12.75/255.0 # 0.05
+    noise_level_img = 12.75/255.0 # 0.05
 
-    # kernel_filename = None
-    # kernel_family = "levin09"
-    # kernel_idx = 0
+    kernel_filename = None
+    kernel_family = "levin09"
+    kernel_idx = 0
 
-    # generate_degraded_dataset_blurred(
-    #     degraded_dataset_name="blurred_ffhq_test20", 
-    #     kernel=load_blur_kernel(filename=kernel_filename, kernel_family=kernel_family, kernel_idx=kernel_idx),
-    #     kernel_name=kernel_filename if kernel_filename is not None else f"{kernel_family}_{kernel_idx}", 
-    #     n_channels=3, 
-    #     noise_level_img=noise_level_img, 
-    #     seed=42, 
-    # )
+    generate_degraded_dataset_blurred(
+        degraded_dataset_name="blurred_ffhq_test20", 
+        kernel=load_operator(filename=kernel_filename, operator_family=kernel_family, operator_idx=kernel_idx),
+        kernel_name=kernel_filename if kernel_filename is not None else f"{kernel_family}_{kernel_idx}", 
+        n_channels=3, 
+        noise_level_img=noise_level_img, 
+        seed=42, 
+    )
 
     ### GENERATE DOWNSAMPLED DATASET
 
@@ -481,23 +503,99 @@ def main():
     # generate_degraded_dataset_downsampled("downsampled_ffhq_test20", kernel, kernel_name, 3, sr_mode, False, 4, 0.05, seed, False)
     
     
-    ## GENERATE MASKED DATASET
+    ### GENERATE MASKED DATASET
     
-    # Generate masked dataset
-    seed = 0
-    mask_family_name = "box_masks"
-    noise_level_img = 12.75/255.0 # 0.05
-    # create_inpainting_masks_family(
-    #     mask_type = "box",
-    #     mask_len_range = [96, 128],
-    #     mask_prob_range = None,
-    #     image_shape = (256, 256),
-    #     margin = (16, 16),
-    #     number_masks = 100,
-    #     mask_family_name = mask_family_name,
-    #     seed = seed
-    #     )
-    generate_degraded_dataset_masked("masked_ffhq_test20", mask_family_name, 3, noise_level_img, seed, False)
+    # noise_level_img = 12.75/255.0 # 0.05
+
+    # mask_family_name = "box_masks"
+
+    # generate_degraded_dataset_masked(
+    #     degraded_dataset_name="masked_ffhq_test20", 
+    #     mask_family_name=mask_family_name, 
+    #     n_channels=3, 
+    #     noise_level_img=noise_level_img, 
+    #     seed=42, 
+    # )
     
+
 if __name__ == "__main__":
-    main()
+
+    NOISE_LEVEL_IMAGE = 12.75/255.0
+
+    parser = argparse.ArgumentParser(description="Generate kernels/masks/datasets.")
+    parser.add_argument(
+        "--kernel",
+        "-k",
+        dest="kernel",
+        action="store_true", 
+        help="if set then create blur kernels family"
+    )
+    parser.add_argument(
+        "--mask",
+        "-m",
+        dest="mask",
+        action="store_true", 
+        help="if set then create inpainting masks family"
+    )
+    parser.add_argument(
+        "--samples",
+        "-x",
+        dest="n_samples",
+        type=int,
+        default=100, 
+        help="specify the number of masks/kernels to generate"
+    )
+    parser.add_argument(
+        "--noise",
+        "-n",
+        dest="noise",
+        type=float,
+        default=NOISE_LEVEL_IMAGE, 
+        help="specify the noise level in [0,1]"
+    )
+    parser.add_argument(
+        "--seed",
+        "-s",
+        dest="seed",
+        type=int,
+        default=None, 
+        help="specify a random seed for reproducibility"
+    )
+
+    args = parser.parse_args()
+
+    if args.kernel: # create blur kernels family
+        raise NotImplementedError("Not implemented yet.")
+    
+    if args.mask: # create inpainting masks family
+
+        # create box masks
+        create_inpainting_masks_family(
+            mask_type="box",
+            mask_len_range=[96, 128],
+            mask_prob_range=None,
+            image_shape=(256, 256),
+            margin=(16, 16),
+            number_masks=args.n_samples,
+            mask_family_name="box_masks",
+            seed=args.seed,
+        )
+
+        # create random masks
+        create_inpainting_masks_family(
+            mask_type="random",
+            mask_len_range=[96, 128],
+            mask_prob_range=[0.5, 0.7],
+            image_shape=(256, 256),
+            margin=(16, 16),
+            number_masks=args.n_samples,
+            mask_family_name="random_masks",
+            seed=args.seed,
+        )
+
+        # plot masks
+        utils_plots.plot_operator_family(operator_family="box_masks", n_samples=16)
+        utils_plots.plot_operator_family(operator_family="random_masks", n_samples=16)
+    
+    if not args.kernel and not args.mask: # generate dataset
+        main()
