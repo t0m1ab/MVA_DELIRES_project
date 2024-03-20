@@ -23,9 +23,9 @@ delires --test
 delires --help
 ``` 
 
-* Download diffusion models: 
+* Download required files like blur kernels or diffusion networks: 
 ```bash
-bash download_model.sh
+bash downloads.sh
 ``` 
 
 ## 1 - Methods

@@ -16,3 +16,12 @@ DIFFPIR_NETWOKRS = [
     "diffusion_ffhq_10m", 
     "256x256_diffusion_uncond"
 ]
+
+HF_REPO_ID = "t0m1ab/mva-delires-data"
+
+MATLAB_BLUR_KERNELS_FILES = [
+    "Levin09.mat",
+    "kernels_12.mat",
+    "custom_blur_centered.mat",
+    # "kernels_bicubicx234.mat",
+]
