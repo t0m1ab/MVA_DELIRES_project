@@ -71,6 +71,8 @@ class Diffuser():
         self.mask = masks[mask_index]
         self.masks_filename = masks_filename
         self.mask_index = mask_index
+        if self.mask is None or self.masks_filename is None or self.mask_index is None:
+            raise ValueError("There is no inpainting mask loaded. Please provide a mask filename or a valid mask file.")
     
     def load_downsample_kernel(self, k_index: int = 0, cwd: str = ""):
         """ Load a downsampling kernel from a file or from a given kernel filename (name without extension). """

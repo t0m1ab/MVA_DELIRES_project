@@ -104,8 +104,9 @@ def run_experiment(
         
         gen_images = []
         
+        # Load clean_image as uint. Used for computing metrics
         clean_image = utils_image.imread_uint(os.path.join(CLEAN_DATA_PATH, img_name+".png"))
-
+        
         for gen_idx in range(nb_gen):
             # apply the method (don't save the image in apply_task by default because there are multiple generations to save)
             if task == "deblur":
@@ -119,7 +120,7 @@ def run_experiment(
                 )
             elif task == "inpaint":
                 mask_index = i
-                diffuser.load_mask(operator_name, mask_index)
+                diffuser.load_inpainting_mask(operator_name, mask_index)
                 restored_image, metrics = diffuser.apply_inpainting(
                     config=diffuser_task_config,
                     clean_image_filename=img_name,
@@ -130,7 +131,7 @@ def run_experiment(
                 )
             else:
                 raise NotImplementedError("The given task is not implemented.")
-
+            
             # save the restored image (with "_genX" suffix where X is the generation index)
             diffuser.save_restored_image(
                 restored_image=restored_image,
@@ -220,7 +221,7 @@ def main():
     
     # # Deblurring
     # exp_name = "test_exp_diffpir_deblur"
-    # degraded_dataset_name = "blurred_dataset"
+    # degraded_dataset_name = "blurred_ffhq_test20"
     
     # run_experiment(
     #     exp_name=exp_name,
@@ -234,21 +235,21 @@ def main():
     #     fid_kept_eigenvectors=157,
     # )
     
-    # # Inpainting
-    # exp_name = "test_exp_diffpir_inpaint"
-    # degraded_dataset_name = "masked_dataset"
+    # Inpainting
+    exp_name = "test_exp_diffpir_inpaint"
+    degraded_dataset_name = "masked_ffhq"
     
-    # run_experiment(
-    #     exp_name=exp_name,
-    #     diffuser_type="diffpir",
-    #     task="inpaint",
-    #     degraded_dataset_name=degraded_dataset_name,
-    #     diffuser_config=DiffPIRConfig(),
-    #     diffuser_task_config=DiffPIRInpaintingConfig(),
-    #     nb_gen=2,
-    #     fid_dims=192,
-    #     fid_kept_eigenvectors=157,
-    # )
+    run_experiment(
+        exp_name=exp_name,
+        diffuser_type="dps",
+        task="inpaint",
+        degraded_dataset_name=degraded_dataset_name,
+        diffuser_config=DPSConfig(),
+        diffuser_task_config=DPSInpaintingConfig(),
+        nb_gen=2,
+        fid_dims=192,
+        fid_kept_eigenvectors=157,
+    )
     
     run_all_experiments()
 

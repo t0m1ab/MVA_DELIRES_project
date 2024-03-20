@@ -235,7 +235,7 @@ def main():
         pigdm_diffuser.load_blur_kernel("motion_kernel_example")
         masks_name = "box_masks"
         mask_index = 0
-        pigdm_diffuser.load_mask(masks_name, mask_index)  
+        pigdm_diffuser.load_inpainting_mask(masks_name, mask_index)  
 
         img_name = "0"
 

@@ -92,6 +92,9 @@ def apply_DiffPIR_for_inpainting(
     Define the configuration, the logger and the device to be used.
     """
 
+    # transform data to match the code of the authors
+    clean_image = clean_image.squeeze().permute((1, 2, 0)).numpy()
+
     if config.calc_LPIPS:
         import lpips
         loss_fn_vgg = lpips.LPIPS(net='vgg').to(device)
@@ -327,6 +330,7 @@ def apply_DiffPIR_for_inpainting(
     # --------------------------------
 
     img_E = util.tensor2uint(x_0)
+    img_H = util.single2uint(img_H)
     
     # compute PSNR
     psnr = util.calculate_psnr(img_E, img_H)
