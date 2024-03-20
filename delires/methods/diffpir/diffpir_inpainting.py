@@ -12,9 +12,7 @@ from delires.methods.diffpir.diffpir_configs import DiffPIRInpaintingConfig
 from delires.methods.diffpir.utils import utils_model
 from delires.methods.diffpir.utils import utils_sisr as sr
 from delires.methods.diffpir.utils import utils_image as util
-from delires.methods.diffpir.utils.delires_utils import (
-    manually_build_image_path,
-)
+from delires.methods.diffpir.utils.delires_utils import manually_build_image_path
 from delires.methods.diffpir.guided_diffusion.unet import UNetModel
 from delires.methods.diffpir.guided_diffusion.respace import SpacedDiffusion
 
