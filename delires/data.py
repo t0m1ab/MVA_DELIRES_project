@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 import hdf5storage
 import numpy as np
 from scipy import ndimage
@@ -10,6 +11,7 @@ import delires.utils.utils_image as utils_image
 from delires.methods.diffpir.utils import utils_sisr as sr
 from delires.utils.utils_resizer import Resizer
 from delires.methods.diffpir.utils.utils_deblur import MotionBlurOperator, GaussialBlurOperator
+from delires.methods.utils.utils_agem import fft_blur
 from delires.methods.utils.utils_inpaint import mask_generator
 from delires.params import OPERATORS_PATH, CLEAN_DATA_PATH, DEGRADED_DATA_PATH
 
@@ -26,7 +28,7 @@ def all_files_exist(filenames: list[str], ext: str = None, path: str = None) -> 
 
 # BLURRING
 
-def blur(image: np.ndarray, kernel: np.ndarray):
+def tito_blur(image: np.ndarray, kernel: np.ndarray):
     """
     Apply a blur kernel to an image. 
     
@@ -40,6 +42,13 @@ def blur(image: np.ndarray, kernel: np.ndarray):
     # mode='wrap' is important for analytical solution
     blurred_img = ndimage.convolve(image, np.expand_dims(kernel, axis=2), mode='wrap')
     return blurred_img
+
+
+def blur(img: torch.Tensor, k: np.ndarray | torch.Tensor) -> torch.Tensor:
+    """ Originally fft_blur from PiGDM utils_agem.py """
+    k_tensor = torch.FloatTensor(k)[None, None]
+    degraded_img = fft_blur(img, k_tensor)
+    return degraded_img
 
 
 def create_blur_kernel(
@@ -71,7 +80,7 @@ def create_blur_kernel(
 
 
 def load_blur_kernel(diy_kernel_name: str|None = None) -> np.ndarray:
-    """ Load a blur kernel stored as a .npy file in KERNELS_PATH. """
+    """ Load a blur kernel stored as a .npy file in OPERATORS_PATH. """
     if diy_kernel_name:
         k = np.load(os.path.join(OPERATORS_PATH, f"{diy_kernel_name}.npy"))
     else:
@@ -79,10 +88,7 @@ def load_blur_kernel(diy_kernel_name: str|None = None) -> np.ndarray:
         kernels = hdf5storage.loadmat(os.path.join(OPERATORS_PATH, 'Levin09.mat'))['kernels']
         k = kernels[0, k_index].astype(np.float32)
 
-    # img_name, ext = os.path.splitext(os.path.basename(img))
-    # util.imsave(k*255.*200, os.path.join(E_path, f'motion_kernel_{img_name}{ext}'))
-    # util.imsave(k*255.*200, os.path.join(E_path, "blur_kernel.jpeg"))
-    #np.save(os.path.join(E_path, 'motion_kernel.npy'), k)
+    k = np.squeeze(k) # remove single dimensions
 
     return k
 
@@ -96,27 +102,43 @@ def create_blurred_and_noised_image(
         seed: int = 0,
         show_img: bool = False,
     ) -> tuple[np.ndarray, np.ndarray, str, str]:
-    """ Create a blurred and noised image from a given clean image and a blur kernel. """
+    """ 
+    Create a blurred and noised image from a given clean image and a blur kernel.
+
+    ARGUMENTS:
+        - kernel: 2D float32 np.ndarray with values in [0,1], the blur kernel.    
+    """
+
+    k_shape = kernel.shape
+    if len(k_shape) != 2 or k_shape[0] != k_shape[1]:
+        raise ValueError(f"Kernel shape is not square: {k_shape}")
+
     img_name, ext = os.path.splitext(os.path.basename(img))
-    clean_img = utils_image.imread_uint(img, n_channels=n_channels)
-    clean_img = utils_image.modcrop(clean_img, 8)  # modcrop
+    clean_img = utils_image.imread_uint(img, n_channels=n_channels) # load PNG file as uint8
+    clean_img = utils_image.modcrop(clean_img, 8) # crop to the nearest multiple of 8 for the size
+    clean_img = utils_image.uint2tensor4(clean_img) # convert to tensor with float [0,1] values and shape (1, C, H, W)
 
-    # mode='wrap' is important for analytical solution
+    # apply blur kernel
     degraded_img = blur(clean_img, kernel)
-    utils_image.imshow(degraded_img) if show_img else None
-    degraded_img = utils_image.uint2single(degraded_img)
+    
+    # utils_image.imshow(degraded_img) if show_img else None
 
-    np.random.seed(seed=seed) # for reproducibility
-    degraded_img = degraded_img * 2 - 1
-    degraded_img += np.random.normal(0, noise_level_img * 2, degraded_img.shape) # add AWGN
-    degraded_img = degraded_img / 2 + 0.5
+    # (1, C, H, W) with unclipped float32 values in [0-esp,1+eps]
+    degraded_img_float32 = degraded_img + torch.randn(degraded_img.size()) * noise_level_img
+
+    # (1, C, H, W) with uint8 values in [0,255]
+    degraded_img_uint8 = utils_image.single2uint(degraded_img)
+    
+    # DEBUG logs
+    # print(f"Image: {img_name}")
+    # print("degraded_img_float32", utils_image.get_infos_img(degraded_img_float32))
+    # print("degraded_img_uint8", utils_image.get_infos_img(degraded_img_uint8))
 
     if save_path is not None:
-        np.save(os.path.join(save_path, f"{img_name}.npy"), degraded_img) # save as .npy because diffpir...
-        utils_image.imsave(
-            utils_image.single2uint(degraded_img), 
-            os.path.join(save_path, f"{img_name}{ext}")
-        ) # save as .png for visualization
+        # save as .npy to avoid uint8 clipping info loss
+        np.save(os.path.join(save_path, f"{img_name}.npy"), degraded_img_float32)
+        # save as .png for visualization (can also be loaded to get uint8 values)
+        utils_image.imsave(degraded_img_uint8, os.path.join(save_path, f"{img_name}{ext}"))
     else:
         return degraded_img, clean_img, img_name, ext
 
@@ -131,13 +153,16 @@ def generate_degraded_dataset_blurred(
     show_img: bool = False,
     ):
     """ Generate a degraded dataset from a clean dataset using a given blur kernel. """
-    print(f"Generating blurred dataset '{degraded_dataset_name}' from clean dataset using kernel {kernel_name}.")
+    clean_base_dir = os.path.basename(CLEAN_DATA_PATH)
+    print(f"Generating dataset '{degraded_dataset_name}' from '{clean_base_dir}' with blur kernel '{kernel_name}'...")
     clean_dataset_path = os.path.join(CLEAN_DATA_PATH)
     degraded_dataset_path = os.path.join(DEGRADED_DATA_PATH, degraded_dataset_name)
+    Path(clean_dataset_path).mkdir(parents=True, exist_ok=True)
+    Path(degraded_dataset_path).mkdir(parents=True, exist_ok=True)
     
     # Load clean dataset
     clean_dataset = sorted(os.listdir(clean_dataset_path))
-    os.makedirs(degraded_dataset_path, exist_ok=True)
+    clean_dataset = [f for f in clean_dataset if not f.startswith(".")]
     kwargs = {
         "degraded_dataset_name": degraded_dataset_name,
         "images": [os.path.basename(f).split(".")[0] for f in clean_dataset], # remove ext
@@ -284,11 +309,13 @@ def generate_degraded_dataset_downsampled(
         
     return degraded_dataset_path
 
+
 #### MASKING
 
 def apply_mask(image: np.ndarray, mask: np.ndarray) -> np.ndarray:
     """ Apply a mask to an image in [0, 1] range. """
     return image * mask
+
 
 def create_inpainting_masks(
     mask_type: str,
@@ -400,19 +427,18 @@ def generate_degraded_dataset_masked(
     return degraded_dataset_path
 
 
-
-
 def main():
 
-    # Generate blurred dataset
+    ### GENERATE BLURRED DATASET
     seed = 0
-    kernel_name = "gaussian_kernel_05"
+    # kernel_name = "gaussian_kernel_05"
+    kernel_name = "motion_kernel_example"
     noise_level_img = 12.75/255.0 # 0.05
     # blur_kernel = create_blur_kernel("Gaussian", 61, seed, kernel_name, "cpu")
-    blur_kernel = load_blur_kernel(kernel_name)
-    generate_degraded_dataset_blurred("blurred_ffhq", blur_kernel, kernel_name, 3, noise_level_img, seed, False)
+    blur_kernel = load_blur_kernel(kernel_name) # should be a 2D float32 np.ndarray with values in [0,1]
+    generate_degraded_dataset_blurred("blurred_ffhq_test20", blur_kernel, kernel_name, 3, noise_level_img, seed, False)
 
-    # # Generate downsampled dataset
+    ### GENERATE DOWNSAMPLED DATASET
     # seed = 0
     # sr_mode = "cubic"
     # classical_degradation = False
@@ -423,9 +449,13 @@ def main():
     # else:
     #     kernel_name = "None"
     #     kernel = None
-    # generate_degraded_dataset_downsampled("downsampled_dataset", kernel, kernel_name, 3, sr_mode, False, 4, 0.05, seed, False)
+    # generate_degraded_dataset_downsampled("downsampled_ffhq_test20", kernel, kernel_name, 3, sr_mode, False, 4, 0.05, seed, False)
     
-    # # Generate masked dataset
+    ### GENERATE MASKED DATASET
+    # seed = 0
+    # masks_name = "box_masks"
+    # noise_level_img = 12.75/255.0 # 0.05
+    # Generate masked dataset
     # seed = 0
     # masks_name = "box_masks"
     # noise_level_img = 12.75/255.0 # 0.05
@@ -440,8 +470,8 @@ def main():
     #     masks_save_name = masks_name,
     #     seed = seed
     #     )
-    # # masks = load_masks(masks_name)
-    # generate_degraded_dataset_masked("masked_ffhq", masks, masks_name, 3, noise_level_img, seed, False)
+    # masks = load_masks(masks_name)
+    # generate_degraded_dataset_masked("masked_ffhq_test20", masks, masks_name, 3, noise_level_img, seed, False)
 
 if __name__ == "__main__":
     main()

@@ -43,7 +43,12 @@ TODO
 TODO
 
 
-## 2 - References
+## 2 - Demo
+
+<img src='./figures/ffhq_sample_17.png' width='700'>
+
+
+## 3 - References
 
 * [1] [Diffusion Posterior Sampling for General Noisy Inverse Problems](https://openreview.net/forum?id=OnD9zGAGT0k) - Chung et al. (ICLR 2023)
 

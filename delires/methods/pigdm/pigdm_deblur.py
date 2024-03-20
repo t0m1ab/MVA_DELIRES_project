@@ -1,23 +1,18 @@
+import os
+from pathlib import Path
 from typing import Callable
 import numpy as np
 import torch
 from tqdm import tqdm
 from logging import Logger
-from diffusers import DDPMPipeline, DDPMScheduler, UNet2DModel
+from diffusers import DDPMScheduler, UNet2DModel
 
 from delires.utils.utils_image import get_infos_img
 import delires.methods.utils.utils_agem as utils_agem
-import delires.methods.utils.utils_image as utils_image
-from delires.methods.utils.utils import adapt_kernel_dps_pigdm, adapt_image_dps_pigdm, alpha_beta
-from delires.methods.pigdm.pigdm_configs import PiGDMConfig, PiGDMDeblurConfig
+import delires.utils.utils_image as utils_image
+from delires.methods.pigdm.pigdm_configs import PiGDMDeblurConfig
 from delires.methods.diffpir.guided_diffusion.unet import UNetModel
-from delires.methods.diffpir.guided_diffusion.respace import SpacedDiffusion
-from delires.methods.diffpir.utils import utils_model
-from delires.methods.diffpir.utils.delires_utils import plot_sequence
 from delires.methods.pigdm.pigdm_sampling import pigdm_sampling
-
-from delires.params import RESTORED_DATA_PATH
-
 
 
 def apply_PiGDM_for_deblurring(
@@ -25,10 +20,10 @@ def apply_PiGDM_for_deblurring(
         clean_image_filename: str,
         degraded_image_filename: str,
         kernel_filename: str,
-        clean_image: np.ndarray,
-        degraded_image: np.ndarray,
+        clean_image: torch.Tensor,
+        degraded_image: torch.Tensor,
         kernel: np.ndarray,
-        model: UNet2DModel,
+        model: UNet2DModel | UNetModel,
         scheduler: DDPMScheduler,
         img_ext: str = "png",
         logger: Logger = None,
@@ -38,11 +33,26 @@ def apply_PiGDM_for_deblurring(
     Apply PiGDM for deblurring to a given degraded image.
 
     ARGUMENTS:
-        [See delires.diffusers.diffpir.diffpir_deblur.apply_DiffPIR_for_deblurring]
+        - config: PiGDMDeblurConfig object containing the configuration for the DPS deblurring.
+        - clean_image_filename: str containing the filename of the clean image.
+        - degraded_image_filename: str containing the filename of the degraded image.
+        - kernel_filename: str containing the filename of the blur kernel.
+        - clean_image: torch.Tensor float32 of shape (1,C,W,H) containing the clean image (with value clipping because loader from PNG).
+        - degraded_image: torch.Tensor float32 of shape (1,C,W,H) containing the degraded image (with or without value clipping).
+        - kernel: np.ndarray float32 of shape (1,1,W,H) containing the blur kernel.
+        - model: neural network type function to use as prior in the DPS sampling.
+        - scheduler: DDPMScheduler object containing the scheduler for the DPS sampling.
+        - img_ext: str containing the extension of the images (default: "png").
+        - logger: Logger object to log the process (default to None meaning no logs).
+        - device: str containing the device to use (default: "cpu").
 
     TIPS:
         - sample["kernel"], sample["L"] and sample["H"] must be torch.Tensor with float values in [0,1]
         - x taken as input of the function <forward_model> must be a torch.Tensor with float values in [0,1]
+    
+    RETURNS:
+        - restored_image: np.ndarray uint8 of shape (W,H,C) containing the restored image.
+        - metrics: dict containing the metrics of the restoration.
     """
 
     # setup model and scheduler
@@ -56,9 +66,10 @@ def apply_PiGDM_for_deblurring(
 
     # setup data and kernel
     sample = {
-        "H": adapt_image_dps_pigdm(clean_image).to(device),
-        "L": adapt_image_dps_pigdm(degraded_image).to(device),
-        "kernel": adapt_kernel_dps_pigdm(kernel).to(device),
+        "H": clean_image.to(device),
+        "L": degraded_image.to(device),
+        "kernel": torch.tensor(kernel, dtype=torch.float32).to(device),
+        "sigma": config.noise_level_img,
     }
 
     if logger is not None: # debug logs
@@ -68,50 +79,40 @@ def apply_PiGDM_for_deblurring(
 
     # log informations
     if logger is not None:
-        logger.info(f"timesteps: {config.timesteps}")
-        logger.info(f"device: {device}")
-        logger.info(f"Clean image: {clean_image_filename}")
-        logger.info(f"Degraded image: {degraded_image_filename}")
-        logger.info(f"Kernel: {kernel_filename}")
+        logger.info(f"- device: {device}")
+        logger.info(f"- timesteps: {config.timesteps}")
+        logger.info(f"* clean image: {clean_image_filename}")
+        logger.info(f"* degraded image: {degraded_image_filename}")
+        logger.info(f"* kernel: {kernel_filename}")
 
     # Forward model (cuda GPU implementation)
     # forward_model = lambda x: agem.fft_blur(x, sample['kernel'].to(device))
     # If you are using an MPS gpu use the following forward_model instead
     # CPU fallback implementation (no MPS support for torch.roll, fft2, Complex Float, etc.)
     guidance = lambda y, x, sigma, r: utils_agem.deblurring_guidance(y, x, sample['kernel'], sigma=sigma, r=r).to(device)
-    y = sample['L'].to(device)
 
     # PiGDM sampling
     res = pigdm_sampling(
-        config,
-        model,
-        scheduler, 
-        y, 
-        guidance, 
+        config=config,
+        model=model,
+        scheduler=scheduler, 
+        y=sample['L'].to(device), 
+        guidance=guidance, 
         scale=1,
         device=device,
         logger=logger,
     )
-    # Ground truth image x
-    x = sample['H'].to(device)
 
-    clean_image = utils_image.tensor2uint(x)
-    degraded_image = utils_image.tensor2uint(y)
-    restored_image = utils_image.tensor2uint(res)
+    clean_image = utils_image.tensor2uint(sample['H'].to(device))
+    degraded_image = utils_image.tensor2uint(sample['L'].to(device))
+    restored_image = utils_image.tensor2uint(res.to(device))
 
-    # plt.figure(figsize=(10, 10/3))
-    # plt.subplot(131)
-    # plt.imshow(util.tensor2uint(y))
-    # plt.axis('off')
-    # plt.subplot(132)
-    # plt.imshow(util.tensor2uint(res))
-    # plt.axis('off')
-    # plt.subplot(133)
-    # plt.imshow(util.tensor2uint(x))
-    # plt.axis('off')
-    # plt.show()
+    if logger is not None: # debug logs
+        logger.debug(get_infos_img(clean_image))
+        logger.debug(get_infos_img(degraded_image))
+        logger.debug(get_infos_img(restored_image))
 
-    psnr = utils_image.calculate_psnr(utils_image.tensor2uint(res), utils_image.tensor2uint(sample['H']))
+    psnr = utils_image.calculate_psnr(restored_image, clean_image)
 
     metrics = {"psnr": psnr}
 

@@ -23,10 +23,6 @@ https://github.com/xinntao/BasicSR
 IMG_EXTENSIONS = ['.jpg', '.JPG', '.jpeg', '.JPEG', '.png', '.PNG', '.ppm', '.PPM', '.bmp', '.BMP', '.tif']
 
 
-def get_infos_img(img: np.ndarray | torch.Tensor):
-    return f"{img.shape} | {img.dtype} | {img.min()} | {img.max()}"
-
-
 def is_image_file(filename):
     return any(filename.endswith(extension) for extension in IMG_EXTENSIONS)
 
@@ -151,7 +147,10 @@ def read_img(path):
 def imread_uint(path, n_channels=3):
     #  input: path
     # output: HxWx3(RGB or GGG), or HxWx1 (G)
+    if not os.path.isfile(path):
+        raise FileNotFoundError(f"File not found: {path}")
     if n_channels == 1:
+        print(path)
         img = cv2.imread(path, 0)  # cv2.IMREAD_GRAYSCALE
         img = np.expand_dims(img, axis=2)  # HxWx1
     elif n_channels == 3:
@@ -163,10 +162,14 @@ def imread_uint(path, n_channels=3):
     return img
 
 
-def imsave(img, img_path):
-    img = np.squeeze(img)
-    if img.ndim == 3:
-        img = img[:, :, [2, 1, 0]]
+def imsave(image, img_path):
+    img = np.squeeze(image) # 1CHW to CWH
+    if img.ndim == 3: # color image
+        if img.shape[0] == 3:
+            img = img.transpose(1, 2, 0)  # CHW to HWC
+        if not img.shape[2] == 3:
+            raise ValueError(f"Expected 3 channels, got image with shape {img.shape}")
+        img = img[:, :, [2, 1, 0]] # BGR to RGB
     cv2.imwrite(img_path, img)
 
 def imsave_batch(imgs, names, save_path, save_name):
@@ -185,6 +188,8 @@ def imsave_batch(imgs, names, save_path, save_name):
 # =======================================
 '''
 
+def get_infos_img(img):
+    return (img.shape, img.dtype, img.min(), img.max())
 
 # --------------------------------
 # numpy(single) <--->  numpy(unit)
@@ -233,10 +238,11 @@ def uint2tensor3(img):
 
 # convert torch tensor to uint
 def tensor2uint(img):
-    img = img.data.squeeze().float().clamp_(0, 1).cpu().numpy()
-    if img.ndim == 3:
-        img = np.transpose(img, (1, 2, 0))
-    return np.uint8((img*255.0).round())
+    """ torch.tensor of shape (1, C, H, W) or (C, H, W) to np.ndarray (H, W, C) """
+    img_uint = img.data.squeeze().float().clamp_(0, 1).cpu().numpy()
+    if img_uint.ndim == 3:
+        img_uint = np.transpose(img_uint, (1, 2, 0))
+    return np.uint8((img_uint*255.0).round())
 
 # convert torch tensor to uint
 def tensor2uint_batch(img):
@@ -244,6 +250,11 @@ def tensor2uint_batch(img):
     if img.ndim == 4:
         img = np.transpose(img, (0, 2, 3, 1))
     return np.uint8((img*255.0).round())
+
+def uint2float32(img: np.ndarray) -> torch.Tensor:
+    """ Convert uint8 image to float32 tensor with batch channel, transpose dims and set values in range [0,1] """
+    img_with_batch_dim = np.expand_dims(np.transpose(img, (2, 0, 1)), axis=0).astype(np.float32) / 255.
+    return torch.tensor(img_with_batch_dim, dtype=torch.float32)
 
 
 # --------------------------------
@@ -609,8 +620,20 @@ def calculate_psnr_from_mse(mse):
 
 def calculate_psnr(img1, img2, border=0):
     # img1 and img2 have range [0, 255]
-    mse = mse(img1, img2, border)
-    calculate_psnr_from_mse(mse)
+    #img1 = img1.squeeze()
+    #img2 = img2.squeeze()
+    if not img1.shape == img2.shape:
+        raise ValueError('Input images must have the same dimensions.')
+    h, w = img1.shape[:2]
+    img1 = img1[border:h-border, border:w-border]
+    img2 = img2[border:h-border, border:w-border]
+
+    img1 = img1.astype(np.float64)
+    img2 = img2.astype(np.float64)
+    mse = np.mean((img1 - img2)**2)
+    if mse == 0:
+        return float('inf')
+    return 20 * math.log10(255.0 / math.sqrt(mse))
 
 
 def calculate_psnr_batch(batch1, batch2, max_pixel=2.0, eps=1e-10):
