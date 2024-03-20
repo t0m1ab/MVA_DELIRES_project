@@ -1,6 +1,6 @@
 import os
+import re 
 from pathlib import Path
-import numpy as np
 import json
 from huggingface_hub import HfFileSystem, hf_hub_download
 
@@ -15,6 +15,13 @@ def load_json(filename: str) -> dict:
 
 def archive_kwargs(kwargs, path):
     json.dump(kwargs, open(path, "w"), indent="\t")
+    
+# Credit for this function goes to Jeff Atwood
+def sorted_nicely(l): 
+    """ Sort the given iterable in the way that humans expect.""" 
+    convert = lambda text: int(text) if text.isdigit() else text 
+    alphanum_key = lambda key: [ convert(c) for c in re.split('([0-9]+)', key) ] 
+    return sorted(l, key = alphanum_key)
 
 
 def get_best_dimensions_for_plot(n: int) -> tuple:

@@ -5,7 +5,7 @@ import delires.methods.diffpir.utils.utils_image as util
 
 ### Mask generator from https://github.com/DPS2022/diffusion-posterior-sampling/
 
-def random_sq_bbox(mask_shape, img_shape=(256, 256), n_channels=3, margin=(16, 16)):
+def random_sq_bbox(mask_shape, img_shape=(256, 256), margin=(16, 16)):
     """Generate a random sqaure mask for inpainting
     """
     H, W = img_shape
@@ -19,14 +19,14 @@ def random_sq_bbox(mask_shape, img_shape=(256, 256), n_channels=3, margin=(16, 1
     l = np.random.randint(margin_width, maxl)
 
     # make mask
-    mask = np.ones((H, W, n_channels))
-    mask[t:t+h, l:l+w, :] = 0
+    mask = np.ones((H, W), dtype=bool)
+    mask[t:t+h, l:l+w] = False
 
-    return mask.astype(bool), t, t+h, l, l+w
+    return mask, t, t+h, l, l+w
 
 class mask_generator:
     def __init__(self, mask_type, mask_len_range=None, mask_prob_range=None,
-                 img_shape=(256, 256), n_channels=3, margin=(16, 16)):
+                 img_shape=(256, 256), margin=(16, 16)):
         """
         (mask_len_range): given in (min, max) tuple.
         Specifies the range of box size in each dimension
@@ -38,7 +38,6 @@ class mask_generator:
         self.mask_len_range = mask_len_range
         self.mask_prob_range = mask_prob_range
         self.img_shape = img_shape
-        self.n_channels = n_channels
         self.margin = margin
 
     def _retrieve_box(self):
@@ -47,8 +46,7 @@ class mask_generator:
         mask_h = np.random.randint(l, h)
         mask_w = np.random.randint(l, h)
         mask, t, tl, w, wh = random_sq_bbox(mask_shape=(mask_h, mask_w),
-                              n_channels = self.n_channels, img_shape=self.img_shape,
-                              margin=self.margin)
+                              img_shape=self.img_shape, margin=self.margin)
         return mask, t, tl, w, wh
 
     def _retrieve_random(self):
@@ -57,12 +55,11 @@ class mask_generator:
         # random pixel sampling
         l, h = self.mask_prob_range
         prob = np.random.uniform(l, h)
-        mask_vec = np.ones(total)
+        mask_vec = np.ones(total, dtype=bool)
         samples = np.random.choice(total, int(total * prob), replace=False)
-        mask_vec[samples] = 0
-        mask = mask_vec.reshape((H, W, 1))
-        mask = mask.repeat(self.n_channels, axis=2)
-        return mask.astype(bool)
+        mask_vec[samples] = False
+        mask = mask_vec.reshape((H, W))
+        return mask
 
     def __call__(self):
         if self.mask_type == 'random':

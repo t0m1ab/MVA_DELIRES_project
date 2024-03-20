@@ -109,41 +109,6 @@ def tito_load_blur_kernel(kernel_filename: str, path: str = None) -> np.ndarray:
     return kernel
 
 
-def load_blur_kernel(
-        filename: str = None, 
-        kernel_family: str = None, 
-        kernel_idx: str | int = None, 
-        path: str = None
-    )-> np.ndarray:
-    """ 
-    Load a blur kernel stored as a .npy file in a subfolder family in path.
-    Check filename first which can be either like f'{family_name}/{family_name}_{kernel_idx}.npy' 
-    or f'{familyname}_{kernel_idx}.npy' (with or without .npy extension).
-    If filename is None, then kernel_family and kernel_idx must be provided and combined to find the right kernel.
-    If path is None, then OPERATORS_PATH is used.
-    """
-    path = OPERATORS_PATH if path is None else path
-
-    if filename is not None: # use filename
-        filename = f"{filename}.npy" if not filename.endswith(".npy") else filename # add extension if not present
-    else: # use kernel_family and kernel_idx
-        if kernel_family is None or kernel_idx is None:
-            raise ValueError("kernel_family and kernel_idx must be provided to load a kernel if no valid filename is provided")
-        filename = os.path.join(kernel_family, f"{kernel_family}_{kernel_idx}.npy")
-    
-    if os.path.isfile(os.path.join(path, filename)):
-        kernel = np.load(os.path.join(path, filename))
-    else:
-        raise ValueError(f"Kernel file {filename} not found in: {path}")
-
-    kernel = np.squeeze(kernel) # remove single dimensions
-
-    if not kernel.ndim == 2:
-        raise ValueError(f"kernel.ndim must be 2, but kernel has shape {kernel.shape}")
-
-    return kernel
-
-
 def visualize_single_kernel(kernel_family: str, kernel_idx: int|str):
     """
     Example: visualize_single_kernel(kernel_family="custom_blur_centered", kernel_idx=823)
