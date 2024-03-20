@@ -80,7 +80,7 @@ def create_blur_kernel(
 
 
 def load_blur_kernel(diy_kernel_name: str|None = None) -> np.ndarray:
-    """ Load a blur kernel stored as a .npy file in KERNELS_PATH. """
+    """ Load a blur kernel stored as a .npy file in OPERATORS_PATH. """
     if diy_kernel_name:
         k = np.load(os.path.join(OPERATORS_PATH, f"{diy_kernel_name}.npy"))
     else:
