@@ -8,7 +8,6 @@ from typing import List
 
 import delires.utils.utils as utils
 import delires.utils.utils_image as utils_image
-from delires.utils.blur_kernels import load_blur_kernel
 from delires.methods.diffpir.utils import utils_sisr as sr
 from delires.utils.utils_resizer import Resizer
 from delires.methods.diffpir.utils.utils_deblur import MotionBlurOperator, GaussialBlurOperator
@@ -25,6 +24,41 @@ def all_files_exist(filenames: list[str], ext: str = None, path: str = None) -> 
     else:
         ext = ""
     return all([os.path.isfile(os.path.join(path, f"{f}.{ext}")) for f in filenames])
+
+
+def load_operator(
+        filename: str = None, 
+        operator_family: str = None, 
+        operator_idx: str | int = None, 
+        path: str = None
+    )-> np.ndarray:
+    """ 
+    Load an operator stored as a .npy file in a subfolder family in path.
+    Check filename first which can be either like f'{family_name}/{family_name}_{operator_idx}.npy' 
+    or f'{familyname}_{operator_idx}.npy' (with or without .npy extension).
+    If filename is None, then operator_family and operator_idx must be provided and combined to find the right operator.
+    If path is None, then OPERATORS_PATH is used.
+    """
+    path = OPERATORS_PATH if path is None else path
+
+    if filename is not None: # use filename
+        filename = f"{filename}.npy" if not filename.endswith(".npy") else filename # add extension if not present
+    else: # use operator_family and operator_idx
+        if operator_family is None or operator_idx is None:
+            raise ValueError("operator_family and operator_idx must be provided to load a operator if no valid filename is provided")
+        filename = os.path.join(operator_family, f"{operator_family}_{operator_idx}.npy")
+    
+    if os.path.isfile(os.path.join(path, filename)):
+        operator = np.load(os.path.join(path, filename))
+    else:
+        raise ValueError(f"Operator file {filename} not found in: {path}")
+
+    operator = np.squeeze(operator) # remove single dimensions
+
+    if not operator.ndim == 2:
+        raise ValueError(f"operator.ndim must be 2, but operator has shape {operator.shape}")
+
+    return operator
 
 
 # BLURRING
@@ -162,7 +196,7 @@ def generate_degraded_dataset_blurred(
     Path(degraded_dataset_path).mkdir(parents=True, exist_ok=True)
     
     # Load clean dataset
-    clean_dataset = sorted(os.listdir(clean_dataset_path))
+    clean_dataset = utils.sorted_nicely(os.listdir(clean_dataset_path))
     clean_dataset = [f for f in clean_dataset if not f.startswith(".")]
     kwargs = {
         "degraded_dataset_name": degraded_dataset_name,
@@ -277,7 +311,7 @@ def generate_degraded_dataset_downsampled(
     degraded_dataset_path = os.path.join(DEGRADED_DATA_PATH, degraded_dataset_name)
     
     # Load clean dataset
-    clean_dataset = sorted(os.listdir(clean_dataset_path))
+    clean_dataset = utils.sorted_nicely(os.listdir(clean_dataset_path))
     os.makedirs(degraded_dataset_path, exist_ok=True)
     kwargs = {
         "degraded_dataset_name": degraded_dataset_name,
@@ -318,27 +352,32 @@ def apply_mask(image: np.ndarray, mask: np.ndarray) -> np.ndarray:
     return image * mask
 
 
-def create_inpainting_masks(
+def create_inpainting_masks_family(
     mask_type: str,
     mask_len_range: List[int] = None,
     mask_prob_range: List[float] =None,
     image_shape: List[int] = (256, 256),
-    n_channels: int = 3,
     margin: List[int] = (16, 16),
     number_masks: int = 20,
-    masks_save_name: str|None = None,
+    mask_family_name: str|None = None,
     seed: int = 0,
     ):
+    mask_family_path = os.path.join(OPERATORS_PATH, mask_family_name)
+    os.makedirs(mask_family_path, exist_ok=True)
     np.random.seed(seed=seed) # for reproducibility
-    mask_gen = mask_generator(mask_type=mask_type, mask_len_range=mask_len_range, mask_prob_range=mask_prob_range, img_shape=image_shape, n_channels=n_channels, margin=margin)
-    masks = []
-    for _ in range(number_masks):
+    mask_gen = mask_generator(mask_type=mask_type, mask_len_range=mask_len_range, mask_prob_range=mask_prob_range, img_shape=image_shape, margin=margin)
+    for i in range(number_masks):
         mask = mask_gen()
-        masks.append(mask)
-    if masks_save_name is not None:
-        np.save(os.path.join(OPERATORS_PATH, f"{masks_save_name}.npy"), masks)
-    
-    return masks
+        np.save(os.path.join(mask_family_path, f"{mask_family_name}_{i}.npy"), mask)
+    utils.archive_kwargs({
+        "mask_family_name": mask_family_name,
+        "number_masks": number_masks,
+        "mask_type": mask_type,
+        "mask_len_range": mask_len_range,
+        "mask_prob_range": mask_prob_range,
+        "image_shape": image_shape,
+        "margin": margin,
+    }, os.path.join(mask_family_path, "mask_info.json"))
 
 
 def create_masked_image(
@@ -361,11 +400,11 @@ def create_masked_image(
     degraded_img = degraded_img * 2 - 1
     degraded_img += np.random.normal(0, noise_level_img * 2, degraded_img.shape) # add AWGN
     degraded_img = degraded_img / 2 + 0.5
-    degraded_img = apply_mask(degraded_img, mask)
+    degraded_img = apply_mask(degraded_img, mask[:,:,None])
     utils_image.imshow(degraded_img) if show_img else None
 
     if save_path is not None:
-        np.save(os.path.join(save_path, f"{img_name}.npy"), degraded_img) # save as .npy because diffpir...
+        np.save(os.path.join(save_path, f"{img_name}.npy"), degraded_img) # save as .npy to adapt to diffpir...
         utils_image.imsave(
             utils_image.single2uint(degraded_img), 
             os.path.join(save_path, f"{img_name}{ext}")
@@ -373,38 +412,32 @@ def create_masked_image(
     else:
         return degraded_img, clean_img, img_name, ext
     
-    
-def load_masks(masks_name: str|None = None) -> np.ndarray:
-    """ Load a set of masks stored as a .npy file in KERNELS_PATH. """
-    if masks_name:
-        masks = np.load(os.path.join(OPERATORS_PATH, f"{masks_name}.npy"))
-    else:
-        masks = np.load(os.path.join(OPERATORS_PATH, "square_masks.npy"))
-
-    return masks
-    
-    
 def generate_degraded_dataset_masked(
     degraded_dataset_name: str,
-    masks: np.ndarray,
-    masks_name: str,
+    mask_family_name: str,
     n_channels: int,
     noise_level_img: float,
     seed: int = 0,
     show_img: bool = False,
     ):
-    """ Generate a degraded dataset from a clean dataset using given masks. """
-    print(f"Generating masked dataset '{degraded_dataset_name}' from clean dataset using masks {masks_name}.")
+    """ Generate a degraded dataset from a clean dataset using the first masks in the passed mask family. """
+    print(f"Generating masked dataset '{degraded_dataset_name}' from clean dataset using masks from {mask_family_name}.")
     clean_dataset_path = os.path.join(CLEAN_DATA_PATH)
     degraded_dataset_path = os.path.join(DEGRADED_DATA_PATH, degraded_dataset_name)
     
     # Load clean dataset
-    clean_dataset = sorted(os.listdir(clean_dataset_path))
+    clean_dataset = utils.sorted_nicely(os.listdir(clean_dataset_path))
     os.makedirs(degraded_dataset_path, exist_ok=True)
+    image_names = [os.path.basename(f).split(".")[0] for f in clean_dataset] # remove ext    
+    
+    # Create image-to-mask correspondance
+    image_to_mask = {image: mask_idx for mask_idx, image in enumerate(image_names)}  
+    
     kwargs = {
         "degraded_dataset_name": degraded_dataset_name,
-        "images": [os.path.basename(f).split(".")[0] for f in clean_dataset], # remove ext
-        "masks_name": masks_name, 
+        "images": image_names,
+        "mask_family_name": mask_family_name,
+        "image_to_mask": image_to_mask,
         "n_channels": n_channels, 
         "noise_level_img": noise_level_img, 
         "seed": seed
@@ -412,7 +445,7 @@ def generate_degraded_dataset_masked(
     utils.archive_kwargs(kwargs, os.path.join(degraded_dataset_path, "dataset_info.json"))    
     
     for i, img in enumerate(clean_dataset):
-        mask = masks[i]
+        mask = load_operator(operator_family=mask_family_name, operator_idx=i)
         create_masked_image(
             mask, 
             os.path.join(clean_dataset_path, img),
@@ -430,22 +463,22 @@ def generate_degraded_dataset_masked(
 
 def main():
 
-    ### GENERATE BLURRED DATASET
+    # ### GENERATE BLURRED DATASET
 
-    noise_level_img = 12.75/255.0 # 0.05
+    # noise_level_img = 12.75/255.0 # 0.05
 
-    kernel_filename = None
-    kernel_family = "levin09"
-    kernel_idx = 0
+    # kernel_filename = None
+    # kernel_family = "levin09"
+    # kernel_idx = 0
 
-    generate_degraded_dataset_blurred(
-        degraded_dataset_name="blurred_ffhq_test20", 
-        kernel=load_blur_kernel(filename=kernel_filename, kernel_family=kernel_family, kernel_idx=kernel_idx),
-        kernel_name=kernel_filename if kernel_filename is not None else f"{kernel_family}_{kernel_idx}", 
-        n_channels=3, 
-        noise_level_img=noise_level_img, 
-        seed=42, 
-    )
+    # generate_degraded_dataset_blurred(
+    #     degraded_dataset_name="blurred_ffhq_test20", 
+    #     kernel=load_blur_kernel(filename=kernel_filename, kernel_family=kernel_family, kernel_idx=kernel_idx),
+    #     kernel_name=kernel_filename if kernel_filename is not None else f"{kernel_family}_{kernel_idx}", 
+    #     n_channels=3, 
+    #     noise_level_img=noise_level_img, 
+    #     seed=42, 
+    # )
 
     ### GENERATE DOWNSAMPLED DATASET
 
@@ -461,28 +494,24 @@ def main():
     #     kernel = None
     # generate_degraded_dataset_downsampled("downsampled_ffhq_test20", kernel, kernel_name, 3, sr_mode, False, 4, 0.05, seed, False)
     
-    ### GENERATE MASKED DATASET
     
-    # seed = 0
-    # masks_name = "box_masks"
-    # noise_level_img = 12.75/255.0 # 0.05
+    ## GENERATE MASKED DATASET
+    
     # Generate masked dataset
-    # seed = 0
-    # masks_name = "box_masks"
-    # noise_level_img = 12.75/255.0 # 0.05
-    # masks = create_inpainting_masks(
+    seed = 0
+    mask_family_name = "box_masks"
+    noise_level_img = 12.75/255.0 # 0.05
+    # create_inpainting_masks_family(
     #     mask_type = "box",
     #     mask_len_range = [96, 128],
     #     mask_prob_range = None,
     #     image_shape = (256, 256),
-    #     n_channels = 3,
     #     margin = (16, 16),
-    #     number_masks = 20,
-    #     masks_save_name = masks_name,
+    #     number_masks = 100,
+    #     mask_family_name = mask_family_name,
     #     seed = seed
     #     )
-    # masks = load_masks(masks_name)
-    # generate_degraded_dataset_masked("masked_ffhq_test20", masks, masks_name, 3, noise_level_img, seed, False)
-
+    generate_degraded_dataset_masked("masked_ffhq_test20", mask_family_name, 3, noise_level_img, seed, False)
+    
 if __name__ == "__main__":
     main()

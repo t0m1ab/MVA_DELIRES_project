@@ -20,7 +20,6 @@ def apply_PiGDM_for_inpainting(
         clean_image_filename: str,
         degraded_image_filename: str,
         masks_filename: str,
-        mask_index: int,
         clean_image: torch.Tensor,
         degraded_image: torch.Tensor,
         mask: np.ndarray,
@@ -71,7 +70,7 @@ def apply_PiGDM_for_inpainting(
         logger.info(f"device: {device}")
         logger.info(f"Clean image: {clean_image_filename}")
         logger.info(f"Degraded image: {degraded_image_filename}")
-        logger.info(f"Masks: {masks_filename}, index: {mask_index}")
+        logger.info(f"Masks: {masks_filename}")
 
     # Guidance (cuda GPU implementation)
     guidance = lambda y, x, sigma, r: utils_agem.inpainting_guidance(y, x, sample['mask'], sigma=sigma, r=r).to(device)

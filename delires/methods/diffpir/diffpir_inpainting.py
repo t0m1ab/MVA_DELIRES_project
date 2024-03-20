@@ -26,7 +26,7 @@ from delires.methods.diffpir.guided_diffusion.script_util import (
     args_to_dict,
 )
 
-from delires.data import load_masks, create_masked_image
+from delires.data import create_masked_image
 
 from delires.params import (
     MODELS_PATH,
@@ -54,8 +54,7 @@ def apply_DiffPIR_for_inpainting(
         config: DiffPIRInpaintingConfig,
         clean_image_filename: str,
         degraded_image_filename: str,
-        masks_filename: str,
-        mask_index: int,
+        mask_filename: str,
         clean_image: np.ndarray,
         degraded_image: np.ndarray,
         mask: np.ndarray,
@@ -72,8 +71,7 @@ def apply_DiffPIR_for_inpainting(
         - config: a DiffPIRDeblurConfig object
         - clean_image_filename: the name of the clean image (without extension, ex: "my_clean_image")
         - degraded_image_filename: the name of the degraded image (without extension, ex: "my_degraded_image")
-        - masks_filename: the name of the set of masks (without extension, ex: "my_masks")
-        - mask_index: the index of the mask within the set of masks
+        - mask_filename: the name of the mask
         - clean_image: the clean image as a numpy array
         - degraded_image: the degraded image as a numpy array
         - mask: the mask as a numpy array
@@ -159,7 +157,7 @@ def apply_DiffPIR_for_inpainting(
         logger.info(f"start step: {t_start} | skip_type: {config.skip_type} | skip interval: {skip} | skipstep analytic steps: {noise_model_t}")
         logger.info(f"Clean image: {clean_image_filename}")
         logger.info(f"Degraded image: {degraded_image_filename}")
-        logger.info(f"Masks: {masks_filename}, index: {mask_index}")
+        logger.info(f"Masks: {mask_filename}")
     
 
     ### 5 - SETUP ADAPTED VAR NAMES FOR THE RESTORATION LOGIC

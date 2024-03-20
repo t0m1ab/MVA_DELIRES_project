@@ -10,7 +10,7 @@ from delires.params import (
     RESTORED_DATA_PATH
 )
 import delires.utils.utils_image as utils_image
-from delires.data import blur, load_blur_kernel, load_masks, apply_mask
+from delires.data import blur, load_operator, load_masks, apply_mask
 
 
 def data_consistency_mse(degraded_dataset_name: str, degraded_image_filename: str, reconstructed_image: np.ndarray, task: TASK, operator_filename: str = None, mask_index:int = None):
@@ -32,7 +32,7 @@ def data_consistency_mse(degraded_dataset_name: str, degraded_image_filename: st
         raise ValueError("The degraded and reconstructed images must be in uint8 format.")
     
     if task == "deblur":
-        kernel = load_blur_kernel(operator_filename)
+        kernel = load_operator(operator_filename)
         return utils_image.mse(degraded_image, blur(reconstructed_image, kernel))
     elif task == "inpaint":
         if mask_index is None:

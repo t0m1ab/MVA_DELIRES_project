@@ -118,8 +118,9 @@ class DPSDiffuser(Diffuser):
             degraded_image_filename: str,
             degraded_dataset_name: str = None,
             experiment_name: str = None,
-            masks_filename: str = None,
-            mask_index: int = 0,
+            mask_filename: str = None,
+            mask_family: str = None,
+            mask_idx: str | int = None,
             use_png_data: bool = True,
             img_ext: str = "png",
             save: bool = False,
@@ -133,8 +134,9 @@ class DPSDiffuser(Diffuser):
             - degraded_image_filename: name of the degraded image (without extension).
             - degraded_dataset_name: name of the degraded dataset (potential subfolder in DEGRADED_DATA_PATH).
             - experiment_name: name of the experiment (potential subfolder in RESTORED_DATA_PATH). If None, then save directly in RESTORED_DATA_PATH.
-            - masks_filename: the name of the set of masks (without extension, ex: "my_masks"). If None, then try to use self.mask and self.masks filename.
-            - mask_index: the index of the mask in the set of masks. If None, then try to use self.mask, self.masks filename and self.mask_idx.
+            - mask_filename: name of the mask (without extension). If None, then try to use self.kernel and self.kernel_filename.
+            - mask_family: name of the mask family which is a potential subfolder in OPERATORS_PATH (ex: "box_masks").
+            - mask_idx: index of the mask in the family (ex: 0).
             - use_png_data: if True, the degraded image will be loaded from PNG file (=> uint values => [0,1] clipping) otherwise from npy file (=> float values can be unclipped).
             - img_ext: extension of the images (default: "png").
             - save: if True, the restored image will be saved in the RESTORED_DATA_PATH/<experiment_name> folder.
@@ -157,12 +159,10 @@ class DPSDiffuser(Diffuser):
         )
 
         # load mask if necessary (otherwise use self.masks and self.masks_filename)
-        if masks_filename is not None:
-            self.load_inpainting_mask(masks_filename, mask_index)
+        if mask_filename is not None:
+            self.load_inpainting_mask(mask_filename=mask_filename, mask_family=mask_family, mask_idx=mask_idx)
 
-        if (self.masks_filename is None and self.mask is not None) or (masks_filename is not None and self.mask is None):
-            raise ValueError("To load a mask, please indicate both the masks set and the mask index.")
-        if self.mask is None or self.masks_filename is None:
+        if self.mask is None:
             raise ValueError("The mask must be loaded before applying inpainting.")
 
         # apply DPS inpainting
@@ -171,7 +171,6 @@ class DPSDiffuser(Diffuser):
             clean_image_filename=clean_image_filename,
             degraded_image_filename=degraded_image_filename,
             masks_filename=self.masks_filename,
-            mask_index=self.mask_index,
             clean_image=clean_image,
             degraded_image=degraded_image,
             mask=self.mask,
@@ -236,9 +235,9 @@ def main():
         dps_config = DPSConfig()
         dps_diffuser = DPSDiffuser(dps_config, autolog="dps_inpainting_test", device=device)
 
-        masks_name = "box_masks"
-        mask_index = 0
-        dps_diffuser.load_inpainting_mask(masks_name, mask_index)  
+        mask_family = "box_masks"
+        mask_idx = 0
+        dps_diffuser.load_inpainting_mask(mask_family=mask_family, mask_idx=mask_idx)  
 
         img_name = "0"
 
@@ -246,9 +245,9 @@ def main():
             config=DPSInpaintingConfig(),
             clean_image_filename=img_name,
             degraded_image_filename=img_name if filename is None else filename,
-            degraded_dataset_name="masked_dataset",
-            # masks_filename=masks_name,
-            # mask_index=mask_index,
+            degraded_dataset_name="masked_ffhq_test20",
+            mask_family=mask_family,
+            mask_idx=mask_idx,
             save=True,
         )
     

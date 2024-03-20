@@ -21,7 +21,6 @@ def apply_DPS_for_inpainting(
         clean_image_filename: str,
         degraded_image_filename: str,
         masks_filename: str,
-        mask_index: int,
         clean_image: torch.Tensor,
         degraded_image: torch.Tensor,
         mask: np.ndarray,
@@ -72,7 +71,7 @@ def apply_DPS_for_inpainting(
         logger.info(f"device: {device}")
         logger.info(f"Clean image: {clean_image_filename}")
         logger.info(f"Degraded image: {degraded_image_filename}")
-        logger.info(f"Masks: {masks_filename}, index: {mask_index}")
+        logger.info(f"Masks: {masks_filename}")
 
     # Forward model (cuda GPU implementation)
     forward_model = lambda x: sample['mask'] * x

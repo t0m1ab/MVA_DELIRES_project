@@ -7,7 +7,7 @@ from abc import abstractmethod
 import torch
 from diffusers import DDPMPipeline, DDPMScheduler, UNet2DModel
 
-from delires.data import load_downsample_kernel, load_blur_kernel
+from delires.data import load_downsample_kernel, load_operator
 from delires.utils import utils_image
 from delires.utils.utils_logger import logger_info
 from delires.methods.dps.dps_configs import DPSConfig, DPSSchedulerConfig
@@ -60,18 +60,15 @@ class Diffuser():
         
     def load_blur_kernel(self, kernel_filename: str = None, kernel_family: str = None, kernel_idx: str | int = None):
         """ Load a blur kernel from a file using the given information. """
-        k = load_blur_kernel(filename=kernel_filename, kernel_family=kernel_family, kernel_idx=kernel_idx) # load kernel
+        k = load_operator(filename=kernel_filename, operator_family=kernel_family, operator_idx=kernel_idx) # load kernel
         self.kernel = np.expand_dims(k, axis=(0,1)) # add batch dim and channel dim for compatibility
         self.kernel_filename = kernel_filename
 
-    def load_inpainting_mask(self, masks_filename: str, mask_index: int = 0):
-        """ Load a mask from a file with a given mask set filename and given index within the selected masks set (name without extension). """
-        masks = np.load(os.path.join(OPERATORS_PATH, f"{masks_filename}.npy"))
-        self.mask = masks[mask_index]
-        self.masks_filename = masks_filename
-        self.mask_index = mask_index
-        if self.mask is None or self.masks_filename is None or self.mask_index is None:
-            raise ValueError("There is no inpainting mask loaded. Please provide a mask filename or a valid mask file.")
+    def load_inpainting_mask(self, mask_filename: str = None, mask_family: str = None, mask_idx: str | int = None):
+        """ Load a mask from a file using the given information. """
+        mask = load_operator(filename=mask_filename, operator_family=mask_family, operator_idx=mask_idx) # load masks
+        self.mask = np.expand_dims(mask, axis=-1) # add channel dim for compatibility
+        self.mask_filename = mask_filename
     
     def load_downsample_kernel(self, k_index: int = 0, cwd: str = ""):
         """ Load a downsampling kernel from a file or from a given kernel filename (name without extension). """
