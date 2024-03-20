@@ -58,13 +58,12 @@ class Diffuser():
         self.mask_index: int = None
         self.mask: np.ndarray = None
         
-    def load_blur_kernel(self, kernel_filename: str|None = None):
-        """ Load a blur kernel from a file or from a given kernel filename (name without extension). """
-        self.kernel = np.expand_dims(load_blur_kernel(kernel_filename), axis=(0,1)) # add batch dim and channel dim for compatibility
+    def load_blur_kernel(self, kernel_filename: str = None, kernel_family: str = None, kernel_idx: str | int = None):
+        """ Load a blur kernel from a file using the given information. """
+        k = load_blur_kernel(filename=kernel_filename, kernel_family=kernel_family, kernel_idx=kernel_idx) # load kernel
+        self.kernel = np.expand_dims(k, axis=(0,1)) # add batch dim and channel dim for compatibility
         self.kernel_filename = kernel_filename
-        if self.kernel is None or self.kernel_filename is None:
-            raise ValueError("There is no blur kernel loaded. Please provide a kernel filename or a valid kernel file.")
-    
+
     def load_inpainting_mask(self, masks_filename: str, mask_index: int = 0):
         """ Load a mask from a file with a given mask set filename and given index within the selected masks set (name without extension). """
         masks = np.load(os.path.join(OPERATORS_PATH, f"{masks_filename}.npy"))

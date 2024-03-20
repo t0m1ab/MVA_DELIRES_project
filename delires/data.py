@@ -8,6 +8,7 @@ from typing import List
 
 import delires.utils.utils as utils
 import delires.utils.utils_image as utils_image
+from delires.utils.blur_kernels import load_blur_kernel
 from delires.methods.diffpir.utils import utils_sisr as sr
 from delires.utils.utils_resizer import Resizer
 from delires.methods.diffpir.utils.utils_deblur import MotionBlurOperator, GaussialBlurOperator
@@ -79,18 +80,18 @@ def create_blur_kernel(
     return k
 
 
-def load_blur_kernel(diy_kernel_name: str|None = None) -> np.ndarray:
-    """ Load a blur kernel stored as a .npy file in OPERATORS_PATH. """
-    if diy_kernel_name:
-        k = np.load(os.path.join(OPERATORS_PATH, f"{diy_kernel_name}.npy"))
-    else:
-        k_index = 0
-        kernels = hdf5storage.loadmat(os.path.join(OPERATORS_PATH, 'Levin09.mat'))['kernels']
-        k = kernels[0, k_index].astype(np.float32)
+# def load_blur_kernel(diy_kernel_name: str|None = None) -> np.ndarray:
+#     """ Load a blur kernel stored as a .npy file in OPERATORS_PATH. """
+#     if diy_kernel_name:
+#         k = np.load(os.path.join(OPERATORS_PATH, f"{diy_kernel_name}.npy"))
+#     else:
+#         k_index = 0
+#         kernels = hdf5storage.loadmat(os.path.join(OPERATORS_PATH, 'Levin09.mat'))['kernels']
+#         k = kernels[0, k_index].astype(np.float32)
 
-    k = np.squeeze(k) # remove single dimensions
+#     k = np.squeeze(k) # remove single dimensions
 
-    return k
+#     return k
 
 
 def create_blurred_and_noised_image(
@@ -430,15 +431,24 @@ def generate_degraded_dataset_masked(
 def main():
 
     ### GENERATE BLURRED DATASET
-    seed = 0
-    # kernel_name = "gaussian_kernel_05"
-    kernel_name = "motion_kernel_example"
+
     noise_level_img = 12.75/255.0 # 0.05
-    # blur_kernel = create_blur_kernel("Gaussian", 61, seed, kernel_name, "cpu")
-    blur_kernel = load_blur_kernel(kernel_name) # should be a 2D float32 np.ndarray with values in [0,1]
-    generate_degraded_dataset_blurred("blurred_ffhq_test20", blur_kernel, kernel_name, 3, noise_level_img, seed, False)
+
+    kernel_filename = None
+    kernel_family = "levin09"
+    kernel_idx = 0
+
+    generate_degraded_dataset_blurred(
+        degraded_dataset_name="blurred_ffhq_test20", 
+        kernel=load_blur_kernel(filename=kernel_filename, kernel_family=kernel_family, kernel_idx=kernel_idx),
+        kernel_name=kernel_filename if kernel_filename is not None else f"{kernel_family}_{kernel_idx}", 
+        n_channels=3, 
+        noise_level_img=noise_level_img, 
+        seed=42, 
+    )
 
     ### GENERATE DOWNSAMPLED DATASET
+
     # seed = 0
     # sr_mode = "cubic"
     # classical_degradation = False
@@ -452,6 +462,7 @@ def main():
     # generate_degraded_dataset_downsampled("downsampled_ffhq_test20", kernel, kernel_name, 3, sr_mode, False, 4, 0.05, seed, False)
     
     ### GENERATE MASKED DATASET
+    
     # seed = 0
     # masks_name = "box_masks"
     # noise_level_img = 12.75/255.0 # 0.05

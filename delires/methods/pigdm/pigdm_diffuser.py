@@ -37,6 +37,8 @@ class PiGDMDiffuser(Diffuser):
             degraded_dataset_name: str = None,
             experiment_name: str = None,
             kernel_filename: str = None,
+            kernel_family: str = None,
+            kernel_idx: str | int = None,
             use_png_data: bool = True,
             img_ext: str = "png",
             save: bool = False,
@@ -52,6 +54,8 @@ class PiGDMDiffuser(Diffuser):
             - degraded_dataset_name: name of the degraded dataset (potential subfolder in DEGRADED_DATA_PATH).
             - experiment_name: name of the experiment (potential subfolder in RESTORED_DATA_PATH). If None, then save directly in RESTORED_DATA_PATH.
             - kernel_filename: name of the kernel (without extension). If None, then try to use self.kernel and self.kernel_filename.
+            - kernel_family: name of the kernel family which is a potential subfolder in OPERATORS_PATH (ex: "levin09").
+            - kernel_idx: index of the kernel in the family (ex: 0).
             - use_png_data: if True, the degraded image will be loaded from PNG file (=> uint values => [0,1] clipping) otherwise from npy file (=> float values can be unclipped).
             - img_ext: extension of the images (default: "png").
             - save: if True, the restored image will be saved in the RESTORED_DATA_PATH/<experiment_name> folder.
@@ -76,7 +80,7 @@ class PiGDMDiffuser(Diffuser):
 
         # load kernel if necessary (otherwise use self.kernel and self.kernel_filename) as float32 tensor of shape (1,1,K,K)
         if kernel_filename is not None:
-            self.load_blur_kernel(kernel_filename)
+            self.load_blur_kernel(kernel_filename=kernel_filename, kernel_family=kernel_family, kernel_idx=kernel_idx)
 
         # apply PiGDM deblurring
         self.log_banner("PiGDM Deblurring")
@@ -211,8 +215,11 @@ def main():
         pigdm_config = PiGDMConfig()
         pigdm_diffuser = PiGDMDiffuser(pigdm_config, autolog="pigdm_debluring_test", device=device)
 
-        # pigdm_diffuser.load_blur_kernel("gaussian_kernel_05")
-        pigdm_diffuser.load_blur_kernel("motion_kernel_example")
+        pigdm_diffuser.load_blur_kernel(
+            kernel_filename=None,
+            kernel_family="levin09",
+            kernel_idx=0,
+        )
 
         img_name = "1"
 
