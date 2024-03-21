@@ -58,7 +58,7 @@ def create_blurred_image(
     degraded_img_float32 = degraded_img + torch.randn(degraded_img.size()) * noise_level_img
 
     # (1, C, H, W) with uint8 values in [0,255]
-    degraded_img_uint8 = utils_image.single2uint(degraded_img)
+    degraded_img_uint8 = utils_image.single2uint(degraded_img_float32)
     
     # DEBUG logs
     # print(f"Image: {img_name}")
