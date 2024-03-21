@@ -19,10 +19,10 @@ def all_files_exist(filenames: list[str], ext: str = None, path: str = None) -> 
     """ Check if all files in a list exist. """
     path = "" if path is None else path
     if ext is not None:
-        ext = ext[1:] if ext[0] == "." else ext
+        ext = f".{ext}" if not ext.startswith(".") else ext # add dot if not present
     else:
         ext = ""
-    return all([os.path.isfile(os.path.join(path, f"{f}.{ext}")) for f in filenames])
+    return all([os.path.isfile(os.path.join(path, f"{f}{ext}")) for f in filenames])
 
 
 def load_json(filename: str) -> dict:

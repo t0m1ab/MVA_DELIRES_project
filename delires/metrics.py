@@ -4,41 +4,59 @@ import csv
 from pathlib import Path
 import copy
 
-from delires.params import (
-    TASK,
-    DEGRADED_DATA_PATH,
-    RESTORED_DATA_PATH
-)
 import delires.utils.utils_image as utils_image
-from delires.data import blur, load_operator, load_masks, apply_mask
+from delires.data import apply_blur, apply_mask
+import delires.utils.operators as operators
+from delires.params import DEGRADED_DATA_PATH, RESTORED_DATA_PATH
 
 
-def data_consistency_mse(degraded_dataset_name: str, degraded_image_filename: str, reconstructed_image: np.ndarray, task: TASK, operator_filename: str = None, mask_index:int = None):
+def data_consistency_mse(
+        degraded_dataset_name: str, 
+        degraded_image_filename: str, 
+        restored_image: np.ndarray,
+        task: str, 
+        operator_family: str, 
+        operator_idx: int|str,
+    ):
     """
-    Compute the data consistency norm between the clean and the reconstructed image.
+    Compute the data consistency norm between the clean and the restored image.
     
     ARGUMENTS:
-        - degraded_dataset_name (str): Name of the degraded dataset.
-        - degraded_image_name (str): Name of the degraded image.
-        - reconstructed_image (np.ndarray): the reconstructed image in uint8.
-        - task (TASK): the task to perform.
-        - operator_filename (str): Name of the operator (without extension).
+        - degraded_dataset_name (str): name of the degraded dataset.
+        - degraded_image_filename (str): name of the degraded image.
+        - restored_image (np.ndarray): the restored image.
+        - task (str): the task to perform (should be one of TASKS).
+        - operator_family (str): family of the operator (should be a subfolder of OPERATORS_PATH).
+        - operator_idx (int|str): index of the operator.
     """
     # load degraded image
-    degraded_image_path = os.path.join(DEGRADED_DATA_PATH, degraded_dataset_name, f"{degraded_image_filename}.png")
+    degraded_image_path = os.path.join(DEGRADED_DATA_PATH, degraded_dataset_name, "png/", f"{degraded_image_filename}.png")
     degraded_image = utils_image.imread_uint(degraded_image_path)
 
-    if degraded_image.dtype != np.uint8 or reconstructed_image.dtype != np.uint8:
-        raise ValueError("The degraded and reconstructed images must be in uint8 format.")
+    # print("degraded_image", utils_image.get_infos_img(degraded_image))
+    # print("restored_image", utils_image.get_infos_img(restored_image))
+
+    if degraded_image.dtype != np.uint8 or restored_image.dtype != np.uint8:
+        raise ValueError("The degraded and restored images must be in uint8 format.")
     
     if task == "deblur":
-        kernel = load_operator(operator_filename)
-        return utils_image.mse(degraded_image, blur(reconstructed_image, kernel))
+
+        kernel = operators.load_operator(operator_family=operator_family, operator_idx=operator_idx)
+        blurred_reconstruction = utils_image.tensor2uint(apply_blur(utils_image.uint2tensor4(restored_image), kernel))
+
+        # print("degraded_image", utils_image.get_infos_img(degraded_image))
+        # print("blurred_reconstruction", utils_image.get_infos_img(blurred_reconstruction))
+
+        return utils_image.mse(degraded_image, blurred_reconstruction)
+    
     elif task == "inpaint":
-        if mask_index is None:
-            raise ValueError("mask_index must be provided to compute consistency norm for inpainting task.")
-        mask = load_masks(operator_filename)[mask_index]
-        masked_reconstruction = utils_image.single2uint(apply_mask(utils_image.uint2single(reconstructed_image), mask))
+
+        mask = operators.load_operator(operator_family=operator_family, operator_idx=operator_idx)
+        masked_reconstruction = utils_image.single2uint(apply_mask(utils_image.uint2single(restored_image), mask[:,:,None]))
+
+        # print("degraded_image", utils_image.get_infos_img(degraded_image))
+        # print("masked_reconstruction", utils_image.get_infos_img(masked_reconstruction))
+
         return utils_image.mse(degraded_image, masked_reconstruction)
     else:
         raise NotImplementedError(f"Data consistency norm not implemented for task {task}.")
