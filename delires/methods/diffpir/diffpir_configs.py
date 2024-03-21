@@ -73,7 +73,7 @@ class DiffPIRInpaintingConfig(DiffPIRConfig):
     zeta: float = 1.0  
     guidance_scale: float = 1.0   
 
-    calc_LPIPS: bool = True
+    calc_LPIPS: bool = False
 
     task_current: str = 'ip'              # 'ip' for inpainting  
     n_channels: int = 3             # fixed
@@ -89,4 +89,12 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    # main()
+    
+    import numpy as np
+    import os
+    import delires.params as params
+    thingy = np.load(os.path.join(params.RESTORED_DATA_PATH, 'test_exp_diffpir_deblur', 'metrics.npz'), allow_pickle=True)
+    for key in thingy.keys():
+        print(key)
+        print(thingy[key])

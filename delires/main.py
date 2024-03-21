@@ -107,11 +107,10 @@ def run_experiment(
     # apply the method over the dataset
     logger.info(f"### ===== Starting experiment {exp_name} with {diffuser_type} for {task} task on {device} ===== ###")
     exp_raw_metrics = {
-        "MSE_to_clean": {}, # computed from generated images
-        "MSE_to_degraded": {}, # computed from generated images
-        "average_image_std": {}, # computed from generated images
+        "MSE_to_clean": {},
+        "MSE_to_degraded": {},
+        "average_image_std": {},
         "coverage": {}, # TODO
-        "LPIPS": {}, # computed on-the-run
         }
     images = dataset_infos["images"][:dataset_subset] if dataset_subset is not None else dataset_infos["images"]
     operator_family = dataset_infos["operator_family_name"]
@@ -123,7 +122,6 @@ def run_experiment(
         img_mse_to_clean = []
         img_mse_to_degraded = []
         img_coverage = []
-        # img_lpips = []
         gen_images = []
         
         # load clean_image as uint. Used for computing metrics
@@ -171,8 +169,6 @@ def run_experiment(
                 operator_idx=operator_idx,
             ))
             img_coverage.append(0)
-            # if diffuser_task_config.calc_LPIPS:
-                # img_lpips.append(metrics["lpips"])
             
             # append generated image to compute std image
             gen_images.append(restored_image)
@@ -185,8 +181,6 @@ def run_experiment(
         exp_raw_metrics["MSE_to_degraded"][img_name] = img_mse_to_degraded
         exp_raw_metrics["average_image_std"][img_name] = [np.mean(std_image)]
         exp_raw_metrics["coverage"][img_name] = img_coverage
-        # if diffuser_task_config.calc_LPIPS:
-            # exp_raw_metrics["LPIPS"][img_name] = list(img_lpips)
         
         # save metrics as a checkpoint after processing one image
         np.savez(os.path.join(RESTORED_DATA_PATH, exp_name, "metrics.npz"), **exp_raw_metrics)
@@ -201,7 +195,7 @@ def run_experiment(
     )
     np.savez(os.path.join(RESTORED_DATA_PATH, exp_name, "metrics.npz"), **exp_raw_metrics, fid=fid)
     
-    report_metrics(exp_raw_metrics, fid, os.path.join(RESTORED_DATA_PATH, exp_name, "metrics.csv"), calc_LPIPS=False)        
+    report_metrics(exp_raw_metrics, fid, os.path.join(RESTORED_DATA_PATH, exp_name, "metrics.csv"))        
 
 
 def run_all_experiments():
@@ -217,10 +211,10 @@ def run_all_experiments():
                 diffuser_type=diffuser,
                 task=task,
                 degraded_dataset_name=TASK_TO_DEGRADED_DATASET[task],
-                dataset_subset=2,
-                nb_gen=2,
+                dataset_subset=None,
+                nb_gen=1,
                 fid_dims=192,
-                fid_kept_eigenvectors=157,
+                fid_kept_eigenvectors=None,
             )
             
     # loop 2: assessment of generation variability
@@ -231,10 +225,10 @@ def run_all_experiments():
                 diffuser_type=diffuser,
                 task=task,
                 degraded_dataset_name=TASK_TO_DEGRADED_DATASET[task],
-                dataset_subset=1,
-                nb_gen=4,
+                dataset_subset=10,
+                nb_gen=5,
                 fid_dims=192,
-                fid_kept_eigenvectors=157,
+                fid_kept_eigenvectors=111,
             )
     
 
@@ -297,7 +291,7 @@ def main():
             task=task,
             degraded_dataset_name=TASK_TO_DEGRADED_DATASET[task],
             dataset_subset=2,
-            nb_gen=2,
+            nb_gen=1,
             fid_dims=192,
             fid_kept_eigenvectors=157,
         )
