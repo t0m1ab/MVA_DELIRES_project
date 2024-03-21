@@ -32,8 +32,8 @@ TASK_DIFFUSER_TO_CONFIG = {
     }
 }
 TASK_TO_DEGRADED_DATASET = {
-    "deblur": "blurred_ffhq_test20",
-    "inpaint": "masked_ffhq_test20"
+    "deblur": "blurred_ffhq_test100",
+    "inpaint": "masked_ffhq_test100"
 }
 
 
