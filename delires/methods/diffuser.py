@@ -7,7 +7,7 @@ from abc import abstractmethod
 import torch
 from diffusers import DDPMPipeline, DDPMScheduler, UNet2DModel
 
-from delires.data import load_operator
+from delires.utils import operators
 from delires.utils import utils_image
 from delires.utils.utils_logger import logger_info
 from delires.methods.dps.dps_configs import DPSConfig, DPSSchedulerConfig
@@ -60,13 +60,13 @@ class Diffuser():
         
     def load_blur_kernel(self, kernel_filename: str = None, kernel_family: str = None, kernel_idx: str | int = None):
         """ Load a blur kernel from a file using the given information. """
-        k = load_operator(filename=kernel_filename, operator_family=kernel_family, operator_idx=kernel_idx) # load kernel
+        k = operators.load_operator(filename=kernel_filename, operator_family=kernel_family, operator_idx=kernel_idx) # load kernel
         self.kernel = np.expand_dims(k, axis=(0,1)) # add batch dim and channel dim for compatibility
         self.kernel_filename = kernel_filename if kernel_filename is not None else f"{kernel_family}_{kernel_idx}"
 
     def load_inpainting_mask(self, mask_filename: str = None, mask_family: str = None, mask_idx: str | int = None):
         """ Load a mask from a file using the given information. """
-        mask = load_operator(filename=mask_filename, operator_family=mask_family, operator_idx=mask_idx) # load masks
+        mask = operators.load_operator(filename=mask_filename, operator_family=mask_family, operator_idx=mask_idx) # load masks
         self.mask = np.expand_dims(mask, axis=-1) # add channel dim for compatibility
         self.mask_filename = mask_filename
     
@@ -135,10 +135,10 @@ class Diffuser():
 
         # load degraded image as float32 tensor of shape (1,C,W,H)
         if use_png_data: # load from PNG file (=> uint values => [0,1] clipping)
-            degraded_image_path = os.path.join(DEGRADED_DATA_PATH, degraded_dataset_name, f"{degraded_image_filename}.png")
+            degraded_image_path = os.path.join(DEGRADED_DATA_PATH, degraded_dataset_name, "png", f"{degraded_image_filename}.png")
             degraded_image = utils_image.uint2float32(utils_image.imread_uint(degraded_image_path))
         else: # load from npy file (=> float values can be unclipped)
-            degraded_image_path = os.path.join(DEGRADED_DATA_PATH, degraded_dataset_name, f"{degraded_image_filename}.npy")
+            degraded_image_path = os.path.join(DEGRADED_DATA_PATH, degraded_dataset_name, "npy", f"{degraded_image_filename}.npy")
             degraded_image = torch.tensor(np.load(degraded_image_path), dtype=torch.float32)
         
         return clean_image, degraded_image

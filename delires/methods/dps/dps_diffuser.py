@@ -213,11 +213,10 @@ def main():
         dps_config = DPSConfig()
         dps_diffuser = DPSDiffuser(dps_config, autolog="dps_debluring_test", device=device)
 
-        # dps_diffuser.load_blur_kernel("gaussian_kernel_05")
         dps_diffuser.load_blur_kernel(
             kernel_filename=None,
             kernel_family="levin09",
-            kernel_idx=0,
+            kernel_idx=1,
         )
 
         img_name = "1"
@@ -237,9 +236,10 @@ def main():
         dps_config = DPSConfig()
         dps_diffuser = DPSDiffuser(dps_config, autolog="dps_inpainting_test", device=device)
 
-        mask_family = "box_masks"
-        mask_idx = 1
-        dps_diffuser.load_inpainting_mask(mask_family=mask_family, mask_idx=mask_idx)  
+        dps_diffuser.load_inpainting_mask(
+            mask_family="box_masks", 
+            mask_idx=1
+        )  
 
         img_name = "1"
 
@@ -248,8 +248,8 @@ def main():
             clean_image_filename=img_name,
             degraded_image_filename=img_name if filename is None else filename,
             degraded_dataset_name="masked_ffhq_test20",
-            mask_family=mask_family,
-            mask_idx=mask_idx,
+            # mask_family=mask_family,
+            # mask_idx=mask_idx,
             save=True,
         )
     

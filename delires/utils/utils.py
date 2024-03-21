@@ -7,8 +7,22 @@ from huggingface_hub import HfFileSystem, hf_hub_download
 from delires.params import DIFFPIR_NETWOKRS, HF_REPO_ID, MODELS_PATH
 
 
-def listdir(path: str) -> list[str]:
-    return [x for x in os.listdir(path) if not x.startswith(".")]
+def listdir(path: str, ext: str = None) -> list[str]:
+    files = [x for x in os.listdir(path) if not x.startswith(".")]
+    if ext is not None:
+        ext = ext.strip(".")
+        files = [x for x in files if x.endswith(ext)]
+    return files
+
+
+def all_files_exist(filenames: list[str], ext: str = None, path: str = None) -> bool:
+    """ Check if all files in a list exist. """
+    path = "" if path is None else path
+    if ext is not None:
+        ext = ext[1:] if ext[0] == "." else ext
+    else:
+        ext = ""
+    return all([os.path.isfile(os.path.join(path, f"{f}.{ext}")) for f in filenames])
 
 
 def load_json(filename: str) -> dict:

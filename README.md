@@ -17,15 +17,14 @@ mv MVA_DELIRES_project/
 pip install -e .
 ```
 
-* **TODO:** You should be able to run tests on the package or print the docs with the following commands in the terminal: 
+* Perform the data pipeline setup (nn download + kernels/masks creation + degraded datasets creation):
 ```bash
-delires --test
-delires --help
+bash delires/data.sh
 ``` 
 
-* Download required files like blur kernels or diffusion networks: 
+* Launch the benchmark:
 ```bash
-bash downloads.sh
+python delires/main.py
 ``` 
 
 ## 1 - Methods

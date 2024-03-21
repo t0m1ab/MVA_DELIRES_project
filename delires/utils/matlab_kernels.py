@@ -80,8 +80,8 @@ def matlab2numpy_kernel(matlab_kernels_filename: str, path: str = None, n_kernel
     Path(os.path.join(path, kernel_basename)).mkdir(parents=True, exist_ok=True)
 
     # save individual kernels as .npy files
-    for kidx in kernels_indexes:
-        kernel = kernels_list[0, kidx].astype(np.float32).squeeze()
+    for kidx, kpos in enumerate(kernels_indexes):
+        kernel = kernels_list[0, kpos].astype(np.float32).squeeze()
         assert kernel.ndim == 2
         assert kernel.dtype == np.float32
         assert kernel.min() >= 0
@@ -89,7 +89,7 @@ def matlab2numpy_kernel(matlab_kernels_filename: str, path: str = None, n_kernel
         if kernel.shape[0] != kernel.shape[1]:
             max_size = max(kernel.shape)
             kernel = utils_agem.pad_kernel(torch.tensor(kernel, dtype=torch.float32), (max_size,max_size)).numpy()
-        kernel_name = f"{kernel_basename}_{kidx}.npy"
+        kernel_name = f"{kidx}.npy"
         np.save(os.path.join(path, kernel_basename, kernel_name), kernel)
     
     print(f"Extracted {n_kernels} kernels from {matlab_kernels_filename} and saved them in: {path}/{kernel_basename}")

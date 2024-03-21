@@ -118,7 +118,6 @@ class DiffPIRDiffuser(Diffuser):
 
         # apply DiffPIR deblurring
         self.log_banner("DiffPIR Deblurring")
-        self.logger.info(f"- model_name: {self.config.model_name}")
         restored_image, metrics = apply_DiffPIR_for_deblurring(
             config=config,
             clean_image_filename=clean_image_filename,
@@ -202,6 +201,7 @@ class DiffPIRDiffuser(Diffuser):
             raise ValueError("The mask must be loaded before applying inpainting.")
 
         # apply DiffPIR inpainting
+        self.log_banner("DiffPIR Inpainting")
         restored_image, metrics = apply_DiffPIR_for_inpainting(
             config=config,
             clean_image_filename=clean_image_filename,
@@ -248,7 +248,7 @@ def main():
         diffpir_diffuser.load_blur_kernel(
             kernel_filename=None,
             kernel_family="levin09",
-            kernel_idx=0,
+            kernel_idx=1,
         )
 
         img_name = "1"
@@ -268,9 +268,10 @@ def main():
         diffpir_config = DiffPIRConfig()
         diffpir_diffuser = DiffPIRDiffuser(diffpir_config, autolog="diffpir_inpainting_test", device=device)
 
-        mask_family = "box_masks"
-        mask_idx = 1
-        diffpir_diffuser.load_inpainting_mask(mask_family=mask_family, mask_idx=mask_idx)    
+        diffpir_diffuser.load_inpainting_mask(
+            mask_family="box_masks", 
+            mask_idx=1,
+        )    
 
         img_name = "1"
 
@@ -279,8 +280,8 @@ def main():
             clean_image_filename=img_name,
             degraded_image_filename=img_name if filename is None else filename,
             degraded_dataset_name="masked_ffhq_test20",
-            mask_family=mask_family,
-            mask_idx=mask_idx,
+            # mask_family=mask_family,
+            # mask_idx=mask_idx,
             save=True,
         )
     
