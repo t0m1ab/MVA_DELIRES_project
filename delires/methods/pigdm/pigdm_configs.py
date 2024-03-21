@@ -11,13 +11,13 @@ class PiGDMConfig:
 @dataclass
 class PiGDMDeblurConfig(PiGDMConfig):
     timesteps: int             = 100               # number of timesteps for scheduler
-    noise_level_img: float     = 12.75/255.0      # set AWGN noise level for LR image, default: 0
+    noise_level_img: float     = 12.75/255.0       # set AWGN noise level for LR image, default: 0
 
 
 @dataclass
 class PiGDMInpaintingConfig(PiGDMConfig):
-    timesteps: int             = 100                               # number of timesteps for scheduler
-    noise_level_img: float     = 12.75/255.0                       # set AWGN noise level for LR image, default: 0
+    timesteps: int             = 100               # number of timesteps for scheduler
+    noise_level_img: float     = 12.75/255.0       # set AWGN noise level for LR image, default: 0
 
 
 @dataclass

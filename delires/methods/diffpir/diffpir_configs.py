@@ -10,8 +10,8 @@ class DiffPIRConfig:
 
 @dataclass
 class DiffPIRDeblurConfig(DiffPIRConfig):
-    iter_num: int              = 50                 # set number of iterations
-    noise_level_img: float     = 12.75/255.0        # set AWGN noise level for LR image, default: 0
+    iter_num: int              = 100                 # set number of iterations
+    noise_level_img: float     = 12.75/255.0         # set AWGN noise level for LR image, default: 0
     
     testset_name: str = 'demo_test'                  # set testing set,  'imagenet_val' | 'ffhq_val'
     iter_num_U: int = 1             # set number of inner iterations, default: 1
@@ -49,7 +49,7 @@ class DiffPIRDeblurConfig(DiffPIRConfig):
 @dataclass
 class DiffPIRInpaintingConfig(DiffPIRConfig):
 
-    iter_num: int               = 10               # set number of iterations
+    iter_num: int               = 100               # set number of iterations
     noise_level_img: float      = 12.75/255.0       # set AWGN noise level for LR image, default: 0
     
     iter_num_U: int = 1             # set number of inner iterations, default: 1
