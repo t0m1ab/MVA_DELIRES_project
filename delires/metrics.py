@@ -62,7 +62,7 @@ def data_consistency_mse(
         raise NotImplementedError(f"Data consistency norm not implemented for task {task}.")
     
 
-def process_raw_metrics(raw_metrics: dict, calc_LPIPS:bool = False):
+def process_raw_metrics(raw_metrics: dict):
     """
     Process the raw metrics to compute the final metrics.
     
@@ -101,31 +101,19 @@ def process_raw_metrics(raw_metrics: dict, calc_LPIPS:bool = False):
     for img_name, coverage in raw_metrics["coverage"].items():
         metrics["coverage"][img_name] = np.mean(coverage)
     
-    # LPIPS
-    if calc_LPIPS:
-        metrics["LPIPS"]["overall"] = np.mean(list(raw_metrics["LPIPS"].values()))
-        for img_name, lpips in raw_metrics["LPIPS"].items():
-            metrics["LPIPS"][img_name] = np.mean(lpips)
-    
     return metrics
 
 
-def report_metrics(raw_metrics: dict, fid: float, exp_path: str, calc_LPIPS:bool = False):
-    metrics = process_raw_metrics(raw_metrics, calc_LPIPS)
+def report_metrics(raw_metrics: dict, fid: float, exp_path: str):
+    metrics = process_raw_metrics(raw_metrics)
     img_names = list(metrics["PSNR"].keys())[1:]
     with open(exp_path, mode='w') as file:
         writer = csv.writer(file, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
-        if calc_LPIPS:
-            fields = ["img", "PSNR", "datafit_RMSE", "average_image_std", "coverage", "LPIPS", "FID"]
-        else:
-            fields = ["img", "PSNR", "datafit_RMSE", "average_image_std", "coverage", "FID"]
+        fields = ["img", "PSNR", "datafit_RMSE", "average_image_std", "coverage", "FID"]
         writer.writerow(fields)
         writer.writerow(["Overall"] + [metrics[field]["overall"] for field in fields[1:-1]] + [fid])
         for img in img_names:
-            writer.writerow(
-                [img]
-                + [np.mean(metrics[field][img]) for field in fields[1:-1]]
-                )
+            writer.writerow([img] + [np.mean(metrics[field][img]) for field in fields[1:-1]])
             
             
 def save_std_image(exp_name, image_name, std_image, img_ext="png"):
@@ -133,3 +121,4 @@ def save_std_image(exp_name, image_name, std_image, img_ext="png"):
     Path(path).mkdir(parents=True, exist_ok=True)
     std_image_path = os.path.join(path, f"std_{image_name}.{img_ext}")
     utils_image.imsave(std_image, std_image_path)
+    

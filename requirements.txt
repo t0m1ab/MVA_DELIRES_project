@@ -14,3 +14,4 @@ torchvision==0.14.0+cu117
 torchaudio==0.13.0
 diffusers
 accelerate
+huggingface_hub

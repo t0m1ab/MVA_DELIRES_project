@@ -16,7 +16,7 @@ def dps_sampling(
         y: torch.Tensor, 
         forward_model: Callable,
         scale: int = 1,
-        scale_guidance: int = 1,
+        scale_guidance: int = 0,
         device: str = "cpu",
         logger: Logger = None,
     ) -> torch.Tensor:

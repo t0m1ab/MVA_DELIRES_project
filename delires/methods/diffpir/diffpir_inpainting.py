@@ -378,25 +378,7 @@ def apply_DiffPIR_for_inpainting(
     
 
 def main():
-
-    img = "69037" # image name without extension in the test location described in the configuration
-
-    config = DiffPIRInpaintingConfig()
-
-    # Build path to the image <img>
-    img_path = manually_build_image_path(img, config.testset_name, config.cwd)
-    # print(f"Image path: {img_path}")
-    
-    # Load mask
-    mask = load_masks("random_masks")[0]
-
-    # Create the degraded image
-    img_L, img_H, img_name, img_ext = create_masked_image(
-        mask=mask, 
-        img=img_path,
-        n_channels=config.n_channels,
-        noise_level_img=config.noise_level_img,
-    )
+    pass
 
     # <method_apply_DiffPIR_for_deblurring> must be used in a Diffuser apply method
 
