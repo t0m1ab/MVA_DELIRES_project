@@ -270,16 +270,16 @@ def main():
 
         diffpir_diffuser.load_inpainting_mask(
             mask_family="box_masks", 
-            mask_idx=1,
+            mask_idx=0,
         )    
 
-        img_name = "1"
+        img_name = "69000"
 
         _ = diffpir_diffuser.apply_inpainting(
             config=DiffPIRInpaintingConfig(),
             clean_image_filename=img_name,
             degraded_image_filename=img_name if filename is None else filename,
-            degraded_dataset_name="masked_ffhq_test20",
+            degraded_dataset_name="masked_ffhq_test100",
             # mask_family=mask_family,
             # mask_idx=mask_idx,
             save=True,

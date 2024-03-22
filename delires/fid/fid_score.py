@@ -238,10 +238,10 @@ def compute_statistics_of_path(path, model, batch_size, dims, device,
             m, s = f['mu'][:], f['sigma'][:]
     else:
         path = pathlib.Path(path)
-        excluded_paths = path.glob('std_images/*')  # TODO: avoid hardcoding this
+        excluded_paths = [str(file) for file in path.glob('std_images/*')]  # TODO: avoid hardcoding this
         files = sorted([file for ext in IMAGE_EXTENSIONS
                        for file in path.glob('**/*.{}'.format(ext))
-                       if file not in excluded_paths])
+                       if str(file) not in excluded_paths])
         m, s = calculate_activation_statistics(files, model, batch_size,
                                                dims, device, num_workers)
 

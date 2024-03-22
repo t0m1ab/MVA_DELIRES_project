@@ -355,6 +355,7 @@ def apply_DiffPIR_for_inpainting(
         util.imsave(np.concatenate([util.single2uint(img_L), img_E, img_H], axis=1), os.path.join(RESTORED_DATA_PATH, f"{img_name}_{config.model_name}_LEH.{img_ext}"))
 
     if config.save_progressive:
+        mask = np.squeeze(mask.cpu().numpy())[:, :, None]
         now = datetime.now()
         current_time = now.strftime("%Y_%m_%d_%H_%M_%S")
         img_total = cv2.hconcat(progress_img)
