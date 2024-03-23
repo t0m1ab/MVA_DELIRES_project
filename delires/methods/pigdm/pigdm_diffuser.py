@@ -222,13 +222,13 @@ def main():
             kernel_idx=1,
         )
 
-        img_name = "1"
+        img_name = "1" if filename is None else filename
 
         _ = pigdm_diffuser.apply_debluring(
             config=PiGDMDeblurConfig(),
             clean_image_filename=img_name,
-            degraded_image_filename=img_name if filename is None else filename,
-            degraded_dataset_name="blurred_ffhq_test20",
+            degraded_image_filename=img_name,
+            degraded_dataset_name="blurred_ffhq_test100",
             # kernel_filename="gaussian_kernel_05",
             save=True, # we save the image on the fly for the demo
         )
@@ -244,12 +244,12 @@ def main():
             mask_idx=1,
         )  
 
-        img_name = "1"
+        img_name = "1" if filename is None else filename
 
         _ = pigdm_diffuser.apply_inpainting(
             config=PiGDMInpaintingConfig(),
             clean_image_filename=img_name,
-            degraded_image_filename=img_name if filename is None else filename,
+            degraded_image_filename=img_name,
             degraded_dataset_name="masked_ffhq_test20",
             # mask_family=mask_family,
             # mask_idx=mask_idx,

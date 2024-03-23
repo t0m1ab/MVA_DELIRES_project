@@ -251,12 +251,12 @@ def main():
             kernel_idx=1,
         )
 
-        img_name = "1"
+        img_name = "1" if filename is None else filename
 
         _ = diffpir_diffuser.apply_debluring(
             config=DiffPIRDeblurConfig(),
             clean_image_filename=img_name,
-            degraded_image_filename=img_name if filename is None else filename,
+            degraded_image_filename=img_name,
             degraded_dataset_name="blurred_ffhq_test20",
             # kernel_filename="gaussian_kernel_05",
             save=True,
@@ -273,12 +273,12 @@ def main():
             mask_idx=1,
         )    
 
-        img_name = "1"
+        img_name = "1" if filename is None else filename
 
         _ = diffpir_diffuser.apply_inpainting(
             config=DiffPIRInpaintingConfig(),
             clean_image_filename=img_name,
-            degraded_image_filename=img_name if filename is None else filename,
+            degraded_image_filename=img_name,
             degraded_dataset_name="masked_ffhq_test20",
             # mask_family=mask_family,
             # mask_idx=mask_idx,
