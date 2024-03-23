@@ -162,6 +162,7 @@ def generate_degraded_dataset(
 
     kwargs = {
         "degraded_dataset_name": degraded_dataset_name,
+        "degradation": mode,
         "images": image_names,
         "operator_family_name": operator_family_name,
         "image_to_operator": image_to_operator,
