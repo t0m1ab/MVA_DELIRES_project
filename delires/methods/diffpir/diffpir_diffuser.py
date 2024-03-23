@@ -270,7 +270,7 @@ def main():
 
         diffpir_diffuser.load_inpainting_mask(
             mask_family="box_masks", 
-            mask_idx=1,
+            mask_idx=0,
         )    
 
         img_name = "1" if filename is None else filename

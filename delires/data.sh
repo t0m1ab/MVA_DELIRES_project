@@ -16,4 +16,4 @@ python utils/operators.py --mask -x 20 -s 42 -p
 python data.py --kernel levin09 -n 15 -s 42
 
 # create masked dataset
-python data.py --mask box_masks -n 15 -s 42
+python data.py --mask random_masks -n 15 -s 42

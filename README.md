@@ -13,18 +13,24 @@ git clone git@github.com:t0m1ab/MVA_DELIRES_project.git
 
 * Install `delires` as a package in edit mode (see config in `pyproject.toml`): 
 ```bash
-mv MVA_DELIRES_project/
+cd MVA_DELIRES_project/
 pip install -e .
+```
+
+* Install python dependencies:
+```bash
+pip install -r requirements.txt
 ```
 
 * Perform the data pipeline setup (nn download + kernels/masks creation + degraded datasets creation):
 ```bash
-bash delires/data.sh
+cd delires
+bash data.sh
 ``` 
 
 * Launch the benchmark:
 ```bash
-python delires/main.py
+python main.py
 ``` 
 
 ## 1 - Methods
