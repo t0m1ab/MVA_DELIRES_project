@@ -48,10 +48,23 @@ TODO
 TODO
 
 
-## 2 - Demo
+## 2 - Example of results
+
+### 2.1 - Blur only
 
 <img src='./figures/ffhq_sample_17.png' width='700'>
 
+### 2.2 - Blur + Noise
+
+<img src='./figures/69042_comparison_deblur.png' width='700'> 
+
+<img src='./figures/69019_comparison_inpaint.png' width='700'> 
+
+### 2.1 - Methods variability
+
+<img src='./figures/69008_variability_deblur.png' width='700'> 
+
+<img src='./figures/69001_variability_inpaint.png' width='700'> 
 
 ## 3 - References
 
