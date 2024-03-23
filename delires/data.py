@@ -141,7 +141,6 @@ def generate_degraded_dataset(
     if 'mask' in operator_family_name and mode == "blur":
         print(f"WARNING: You may be trying to generate a blurred dataset from a mask family...")
     n_operators = operators.check_integrity_operators_family(operator_family_name)
-    task = "deblur" if mode == "blur" else "inpaint"
 
     print(f"Generating degraded dataset '{degraded_dataset_name}' from clean dataset using operators from {operator_family_name}.")
     clean_dataset_path = os.path.join(CLEAN_DATA_PATH)
@@ -163,7 +162,7 @@ def generate_degraded_dataset(
 
     kwargs = {
         "degraded_dataset_name": degraded_dataset_name,
-        "task": task,
+        "degradation": mode,
         "images": image_names,
         "operator_family_name": operator_family_name,
         "image_to_operator": image_to_operator,
