@@ -222,7 +222,7 @@ def main():
         # create random masks
         create_inpainting_masks_family(
             mask_type="random",
-            mask_len_range=[96, 128],
+            mask_len_range=None,
             mask_prob_range=[0.5, 0.7],
             image_shape=(256, 256),
             margin=(16, 16),
