@@ -9,9 +9,9 @@ from delires.methods.diffpir.diffpir_configs import DiffPIRConfig, DiffPIRDeblur
 
 
 DIFFUSERS = {
-    "diffpir": DiffPIRDiffuser,
     "dps": DPSDiffuser,
     "pigdm": PiGDMDiffuser,
+    "diffpir": DiffPIRDiffuser,
 }
 
 DIFFUSER_CONFIG = {
