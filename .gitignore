@@ -2,7 +2,9 @@
 .venv/*
 **/__pycache__/
 
-delires/data/degraded_data/
+report/
+
+delires/data/degraded_data**/
 delires/data/ffhq/
 delires/data/clean_data_diffpir/
 
@@ -18,4 +20,4 @@ delires/operators/
 
 **/notes.txt
 **/sandbox.py
-**//sandbox.ipynb
+**/sandbox.ipynb
