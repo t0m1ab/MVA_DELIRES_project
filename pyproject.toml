@@ -2,7 +2,7 @@
 name = "delires"
 version = "0.1.0"
 description = "MVA Guided Diffusion Models project for the DELIRES class"
-keywords = ["diffusion", "denoising", "inpainting", "super resolution", "deep learning", "computer vision"]
+keywords = ["diffusion", "denoising", "inpainting", "image restoration", "deep learning"]
 requires-python = ">=3.10"
 
 authors = [
